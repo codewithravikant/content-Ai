@@ -1,12 +1,5 @@
 import { ContentType } from '../types'
 
-function stripHTML(html: string): string {
-  const tmp = document.createElement('DIV')
-  tmp.innerHTML = html
-  return tmp.textContent || tmp.innerText || ''
-}
-
-
 // Handle markdown content (content from backend is already markdown)
 function cleanMarkdown(md: string): string {
   return md.trim()
