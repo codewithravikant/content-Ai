@@ -1,11 +1,14 @@
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Dict, Any
 import json
+import os
+from pathlib import Path
 
 from app.schemas import GenerateRequest, GenerateResponse, ExportPDFRequest
 from app.normalization import normalize_request, validate_request
@@ -44,7 +47,6 @@ app = FastAPI(
 
 # CORS middleware
 # Get allowed origins from environment variable or default to wildcard
-import os
 allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -56,6 +58,14 @@ app.add_middleware(
 
 # Initialize AI client
 ai_client = AIClient()
+
+# Mount static files for frontend (only if frontend/dist exists)
+# This allows single-service deployment from root directory
+_frontend_dist_path = Path(__file__).parent.parent.parent / "frontend" / "dist"
+if _frontend_dist_path.exists():
+    # Mount static files at root, but exclude API routes
+    app.mount("/assets", StaticFiles(directory=str(_frontend_dist_path / "assets")), name="assets")
+    logger.info(f"Mounted frontend static files from {_frontend_dist_path}")
 
 
 @app.middleware("http")
@@ -314,6 +324,34 @@ async def log_token_usage(client_ip: str, tokens: int, content_type: str, model:
     """Background task to log token usage for monitoring."""
     from app.logging_config import log_token_usage as log_token
     log_token(client_ip, tokens, content_type, model)
+
+
+@app.get("/")
+async def serve_index():
+    """Serve frontend index.html at root."""
+    index_path = _frontend_dist_path / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    raise HTTPException(status_code=404, detail="Frontend not found")
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """
+    Serve frontend SPA - catch-all route for client-side routing.
+    Only serves frontend if it's not an API route.
+    """
+    # Don't interfere with API routes
+    if full_path.startswith(("api/", "generate", "export", "health", "metrics", "docs", "openapi.json")):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Serve index.html for SPA routing
+    index_path = _frontend_dist_path / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    
+    # If no frontend, return 404
+    raise HTTPException(status_code=404, detail="Frontend not found")
 
 
 @app.exception_handler(Exception)
