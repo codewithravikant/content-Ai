@@ -1,0 +1,15 @@
+# Nixpacks configuration for Frontend service on Railway
+[phases.setup]
+nixPkgs = ["nodejs-18_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[staticAssets]
+"dist" = "/"
+
+[start]
+cmd = "npm run start"

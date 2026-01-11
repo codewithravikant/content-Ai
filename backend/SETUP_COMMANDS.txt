@@ -1,0 +1,39 @@
+# Copy and paste these commands one by one in your terminal
+
+# IMPORTANT: Use Python 3.11 or 3.12 (NOT 3.13!)
+# If you only have Python 3.13, install 3.11 or 3.12 first:
+# brew install python@3.11
+# OR
+# brew install python@3.12
+
+# 1. Navigate to backend (if not already there)
+cd /Users/ravikantpandit/koodsisu/ghostwriter/backend
+
+# 2. Remove old venv if it exists
+rm -rf venv
+
+# 3. Create virtual environment with Python 3.11 or 3.12
+python3.11 -m venv venv
+# OR if you installed 3.12:
+# python3.12 -m venv venv
+
+# 3. ACTIVATE the virtual environment (THIS IS THE KEY STEP!)
+source venv/bin/activate
+
+# You should now see (venv) at the start of your prompt!
+# It should look like: (venv) ravikantpandit@Mac backend %
+
+# 4. Now install dependencies (use 'pip' not 'pip3' after activation)
+pip install -r requirements.txt
+
+# OR if that doesn't work, use:
+python3 -m pip install -r requirements.txt
+
+# 5. Set your OpenAI API key
+export OPENAI_API_KEY=your_api_key_here
+
+# 6. Run the server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# To deactivate the virtual environment later (when done):
+# deactivate
