@@ -141,7 +141,7 @@ const App = () => {
             </div>
             <div>
               <h1 className="font-black text-2xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">
-                GHOSTWRITER
+                CONTENT AI
               </h1>
               <p className="text-[10px] font-bold tracking-[0.2em] text-cyan-400 opacity-80 uppercase text-center">Neural Engine v4.0</p>
             </div>

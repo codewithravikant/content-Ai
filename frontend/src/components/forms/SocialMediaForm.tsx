@@ -11,7 +11,7 @@ interface SocialMediaFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'ghostwriter_social_media_form'
+const STORAGE_KEY = 'content_ai_social_media_form'
 
 export function SocialMediaForm({ onGenerate, onGenerateStart, onError }: SocialMediaFormProps) {
   const {

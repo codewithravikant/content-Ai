@@ -11,7 +11,7 @@ interface JobApplicationFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'ghostwriter_job_application_form'
+const STORAGE_KEY = 'content_ai_job_application_form'
 
 export function JobApplicationForm({ onGenerate, onGenerateStart, onError }: JobApplicationFormProps) {
   const {

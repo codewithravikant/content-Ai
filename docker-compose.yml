@@ -5,7 +5,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ghostwriter-backend
+    container_name: content-ai-backend
     ports:
       - "8000:8000"
     environment:
@@ -19,7 +19,7 @@ services:
     volumes:
       - ./backend:/app
     networks:
-      - ghostwriter-network
+      - content-ai-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -31,7 +31,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.nginx
-    container_name: ghostwriter-frontend
+    container_name: content-ai-frontend
     ports:
       - "3000:80"
     environment:
@@ -39,7 +39,7 @@ services:
     depends_on:
       - backend
     networks:
-      - ghostwriter-network
+      - content-ai-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
@@ -48,5 +48,5 @@ services:
       retries: 3
 
 networks:
-  ghostwriter-network:
+  content-ai-network:
     driver: bridge

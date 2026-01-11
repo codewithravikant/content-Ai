@@ -11,7 +11,7 @@ interface BlogPostFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'ghostwriter_blog_post_form'
+const STORAGE_KEY = 'content_ai_blog_post_form'
 
 export function BlogPostForm({ onGenerate, onGenerateStart, onError }: BlogPostFormProps) {
   const {

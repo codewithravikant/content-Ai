@@ -35,7 +35,7 @@ openapi-typescript-codegen \
     --output "./src/api/generated" \
     --client "axios" \
     --useOptions \
-    --name "GhostwriterApi"
+    --name "ContentAiApi"
 
 echo "✓ TypeScript types generated in frontend/src/api/generated"
 echo ""

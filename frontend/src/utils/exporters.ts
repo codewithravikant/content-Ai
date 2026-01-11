@@ -26,7 +26,7 @@ export function exportToPlainText(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `ghostwriter-content-${Date.now()}.txt`
+  a.download = `content-ai-${Date.now()}.txt`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -40,7 +40,7 @@ export function exportToMarkdown(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `ghostwriter-content-${Date.now()}.md`
+  a.download = `content-ai-${Date.now()}.md`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -62,7 +62,7 @@ export function exportToHTML(content: string): void {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ghostwriter Content</title>
+  <title>Content AI</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -90,7 +90,7 @@ export function exportToHTML(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `ghostwriter-content-${Date.now()}.html`
+  a.download = `content-ai-${Date.now()}.html`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -116,7 +116,7 @@ export async function exportToPDF(content: string, contentType: ContentType): Pr
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ghostwriter-${contentType}-${Date.now()}.pdf`
+    a.download = `content-ai-${contentType}-${Date.now()}.pdf`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

@@ -11,7 +11,7 @@ interface EmailFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'ghostwriter_email_form'
+const STORAGE_KEY = 'content_ai_email_form'
 
 export function EmailForm({ onGenerate, onGenerateStart, onError }: EmailFormProps) {
   const {

@@ -29,14 +29,14 @@ cache = get_cache()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting Ghostwriter API")
+    logger.info("Starting Content AI API")
     yield
     # Shutdown
-    logger.info("Shutting down Ghostwriter API")
+    logger.info("Shutting down Content AI API")
 
 
 app = FastAPI(
-    title="Ghostwriter API",
+    title="Content AI API",
     description="AI Content Generation Platform",
     version="1.0.0",
     lifespan=lifespan,
@@ -79,7 +79,7 @@ async def logging_middleware(request: Request, call_next):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "ghostwriter"}
+    return {"status": "healthy", "service": "content-ai"}
 
 
 @app.get("/metrics")
@@ -303,7 +303,7 @@ async def export_pdf(request: ExportPDFRequest):
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=ghostwriter-{request.content_type}-{int(time.time())}.pdf"}
+            headers={"Content-Disposition": f"attachment; filename=content-ai-{request.content_type}-{int(time.time())}.pdf"}
         )
     except Exception as e:
         logger.error(f"PDF export error: {e}")
