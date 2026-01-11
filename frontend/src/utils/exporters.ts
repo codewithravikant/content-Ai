@@ -6,13 +6,6 @@ function stripHTML(html: string): string {
   return tmp.textContent || tmp.innerText || ''
 }
 
-function htmlToMarkdown(html: string): string {
-  // Simple conversion - content is already in markdown/text format from backend
-  let md = stripHTML(html)
-  // Basic markdown conversions
-  md = md.replace(/\n{3,}/g, '\n\n')
-  return md.trim()
-}
 
 // Handle markdown content (content from backend is already markdown)
 function cleanMarkdown(md: string): string {

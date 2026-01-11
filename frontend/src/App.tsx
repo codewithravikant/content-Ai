@@ -1,20 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { 
   PenTool, 
   Mail, 
-  Settings2, 
-  Send, 
   Download, 
   Copy, 
-  CheckCircle2, 
-  Sparkles, 
-  History,
   Layout,
-  Eye,
-  Type,
-  MoreVertical,
-  ChevronRight,
-  Cpu,
   Zap,
   ShieldCheck,
   Globe,
@@ -23,7 +13,6 @@ import {
   Linkedin
 } from 'lucide-react';
 import { ContentType } from './types';
-import { generateContent } from './services/api';
 import { BlogPostForm } from './components/forms/BlogPostForm';
 import { EmailForm } from './components/forms/EmailForm';
 import { SocialMediaForm } from './components/forms/SocialMediaForm';
