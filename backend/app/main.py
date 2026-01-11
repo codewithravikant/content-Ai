@@ -61,11 +61,30 @@ ai_client = AIClient()
 
 # Mount static files for frontend (only if frontend/dist exists)
 # This allows single-service deployment from root directory
-_frontend_dist_path = Path(__file__).parent.parent.parent / "frontend" / "dist"
-if _frontend_dist_path.exists():
-    # Mount static files at root, but exclude API routes
-    app.mount("/assets", StaticFiles(directory=str(_frontend_dist_path / "assets")), name="assets")
-    logger.info(f"Mounted frontend static files from {_frontend_dist_path}")
+# Try multiple path resolutions for different deployment scenarios
+_frontend_dist_path = None
+possible_paths = [
+    Path(__file__).parent.parent.parent / "frontend" / "dist",  # From backend/app/main.py -> /app/frontend/dist
+    Path.cwd().parent / "frontend" / "dist",  # If running from backend/ -> ../frontend/dist
+    Path("/app") / "frontend" / "dist",  # Absolute path in Railway
+]
+
+for path in possible_paths:
+    if path.exists():
+        _frontend_dist_path = path
+        logger.info(f"Found frontend dist at: {_frontend_dist_path}")
+        break
+
+if _frontend_dist_path and _frontend_dist_path.exists():
+    assets_dir = _frontend_dist_path / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+        logger.info(f"Mounted frontend assets from {assets_dir}")
+    else:
+        logger.warning(f"Frontend dist found at {_frontend_dist_path} but assets directory not found")
+else:
+    logger.warning(f"Frontend dist not found. Tried paths: {[str(p) for p in possible_paths]}")
+    _frontend_dist_path = None
 
 
 @app.middleware("http")
@@ -98,6 +117,24 @@ async def metrics():
     return {
         "status": "ok",
         "cache_size": len(cache._cache) if hasattr(cache, '_cache') else 0,
+    }
+
+
+@app.get("/debug/paths")
+async def debug_paths():
+    """Debug endpoint to check file paths."""
+    debug_paths = [
+        Path(__file__).parent.parent.parent / "frontend" / "dist",
+        Path.cwd().parent / "frontend" / "dist",
+        Path("/app") / "frontend" / "dist",
+    ]
+    return {
+        "cwd": str(Path.cwd()),
+        "__file__": str(__file__),
+        "frontend_dist_path": str(_frontend_dist_path) if _frontend_dist_path else None,
+        "frontend_dist_exists": _frontend_dist_path.exists() if _frontend_dist_path else False,
+        "possible_paths": [str(p) for p in debug_paths],
+        "path_checks": {str(p): p.exists() for p in debug_paths},
     }
 
 
@@ -329,10 +366,12 @@ async def log_token_usage(client_ip: str, tokens: int, content_type: str, model:
 @app.get("/")
 async def serve_index():
     """Serve frontend index.html at root."""
+    if not _frontend_dist_path:
+        raise HTTPException(status_code=404, detail="Frontend not found")
     index_path = _frontend_dist_path / "index.html"
     if index_path.exists():
         return FileResponse(str(index_path))
-    raise HTTPException(status_code=404, detail="Frontend not found")
+    raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 
 @app.get("/{full_path:path}")
@@ -345,13 +384,16 @@ async def serve_frontend(full_path: str):
     if full_path.startswith(("api/", "generate", "export", "health", "metrics", "docs", "openapi.json")):
         raise HTTPException(status_code=404, detail="Not found")
     
+    if not _frontend_dist_path:
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    
     # Serve index.html for SPA routing
     index_path = _frontend_dist_path / "index.html"
     if index_path.exists():
         return FileResponse(str(index_path))
     
     # If no frontend, return 404
-    raise HTTPException(status_code=404, detail="Frontend not found")
+    raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 
 @app.exception_handler(Exception)
