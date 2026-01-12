@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Hugging Face API configuration
 hf_api_key = os.getenv("HF_API_KEY")
 hf_model = os.getenv("HF_MODEL", "google/flan-t5-large")
-# Use api-inference endpoint (router endpoint may have compatibility issues)
+# Hugging Face router endpoint (api-inference is deprecated)
 hf_base_url = os.getenv("HF_BASE_URL", "https://api-inference.huggingface.co")
 hf_timeout = int(os.getenv("HF_TIMEOUT", "120"))  # Default 120 seconds
 
@@ -208,7 +208,14 @@ class HuggingFaceClient:
             # endregion
             
             # Provide specific error messages for common status codes
-            if status_code == 503:
+            if status_code == 410:
+                error_message = (
+                    f"Hugging Face API endpoint is deprecated (410). "
+                    f"The endpoint {self.base_url} is no longer supported. "
+                    f"Please check Hugging Face documentation for the current API endpoint. "
+                    f"You may need to update HF_BASE_URL environment variable."
+                )
+            elif status_code == 503:
                 error_message = f"Hugging Face model is loading (503). Please try again in a few moments. Model: {self.model}"
             elif status_code == 429:
                 error_message = f"Hugging Face API rate limit exceeded (429). Please try again later."
