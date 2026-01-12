@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -58,6 +58,9 @@ app.add_middleware(
 
 # Initialize AI client
 ai_client = AIClient()
+
+# Create API router with /api prefix
+api_router = APIRouter(prefix="/api")
 
 # Mount static files for frontend (only if frontend/dist exists)
 # This allows single-service deployment from root directory
@@ -138,7 +141,7 @@ async def debug_paths():
     }
 
 
-@app.post("/generate", response_model=GenerateResponse)
+@api_router.post("/generate", response_model=GenerateResponse)
 async def generate_content(req: GenerateRequest, http_request: Request, background_tasks: BackgroundTasks):
     """
     Generate content based on user input.
@@ -274,7 +277,7 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
     return GenerateResponse(content=processed["content"], metadata=metadata)
 
 
-@app.get("/generate/stream")
+@api_router.get("/generate/stream")
 async def generate_content_stream(http_request: Request):
     """
     Stream content generation using Server-Sent Events (SSE).
@@ -337,7 +340,7 @@ async def generate_content_stream(http_request: Request):
     )
 
 
-@app.post("/export/pdf")
+@api_router.post("/export/pdf")
 async def export_pdf(request: ExportPDFRequest):
     """
     Export content to PDF format (backend rendering).
@@ -361,6 +364,10 @@ async def log_token_usage(client_ip: str, tokens: int, content_type: str, model:
     """Background task to log token usage for monitoring."""
     from app.logging_config import log_token_usage as log_token
     log_token(client_ip, tokens, content_type, model)
+
+
+# Include API router (routes will be prefixed with /api)
+app.include_router(api_router)
 
 
 @app.get("/")
