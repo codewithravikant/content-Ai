@@ -117,11 +117,26 @@ class FalconClient:
             }
             
         except httpx.HTTPStatusError as e:
-            logger.error(f"Falcon API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise Exception(f"Falcon API error: {e.response.status_code} - {e.response.text}")
+            status_code = e.response.status_code
+            error_text = e.response.text
+            logger.error(f"Falcon API HTTP error: {status_code} - {error_text}")
+            
+            # Provide specific error messages for common status codes
+            if status_code == 405:
+                error_msg = f"Falcon API returned Method Not Allowed (405). The endpoint may not support POST requests, or the URL might be incorrect. URL: {self.base_url}/generate"
+            elif status_code == 404:
+                error_msg = f"Falcon API endpoint not found (404). Check FALCON_API_BASE_URL: {self.base_url}"
+            elif status_code == 401:
+                error_msg = f"Falcon API authentication failed (401). Check FALCON_API_KEY if authentication is required."
+            elif status_code == 500:
+                error_msg = f"Falcon API server error (500). The server may be experiencing issues."
+            else:
+                error_msg = f"Falcon API error ({status_code}): {error_text}"
+            
+            raise Exception(error_msg)
         except httpx.RequestError as e:
             logger.error(f"Falcon API request error: {e}")
-            raise Exception(f"Failed to connect to Falcon API: {str(e)}")
+            raise Exception(f"Failed to connect to Falcon API: {str(e)}. Check FALCON_API_BASE_URL: {self.base_url}")
         except Exception as e:
             logger.error(f"Falcon API generation error: {e}", exc_info=True)
             raise
