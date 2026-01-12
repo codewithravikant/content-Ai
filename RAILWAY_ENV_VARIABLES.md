@@ -18,8 +18,11 @@ Set these in your **Backend** service on Railway:
 
 | Variable Name | Description | Required | Example |
 |--------------|-------------|-----------|---------|
-| `OPENAI_API_KEY` | Your OpenAI API key (starts with `sk-` or `sk-proj-`) | ✅ **Yes** | `sk-...` |
+| `AI_PROVIDER` | AI provider to use: `openai` or `huggingface` (or `hf`) | No | `openai` (default) |
+| `OPENAI_API_KEY` | Your OpenAI API key (starts with `sk-` or `sk-proj-`) | ✅ **Yes** (if using OpenAI) | `sk-...` |
 | `OPENAI_MODEL` | OpenAI model to use | No | `gpt-3.5-turbo` (default) |
+| `HF_API_KEY` | Your Hugging Face API token | ✅ **Yes** (if using Hugging Face) | `hf_...` |
+| `HF_MODEL` | Hugging Face model identifier | No | `google/flan-t5-large` (default) |
 | `AI_TIMEOUT` | Timeout for AI requests (seconds) | No | `60` (default) |
 | `PORT` | Port for the backend service | No | Auto-set by Railway |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | No | `https://your-frontend.railway.app` |
@@ -64,9 +67,15 @@ railway link
 # Set a secret variable
 railway variables set OPENAI_API_KEY=sk-your-key-here --secret
 
-# Set multiple variables
+# Set multiple variables (OpenAI example)
+railway variables set AI_PROVIDER=openai
 railway variables set OPENAI_API_KEY=sk-your-key-here --secret
 railway variables set VITE_API_BASE_URL=https://your-backend.railway.app --secret
+
+# Or for Hugging Face
+railway variables set AI_PROVIDER=huggingface
+railway variables set HF_API_KEY=hf-your-token-here --secret
+railway variables set HF_MODEL=google/flan-t5-large
 ```
 
 ### Method 3: Railway.toml (Not Recommended for Secrets)
@@ -81,9 +90,20 @@ railway variables set VITE_API_BASE_URL=https://your-backend.railway.app --secre
 2. Connect your GitHub repository
 3. Set root directory to: `backend`
 4. Add environment variables as **secrets**:
+   
+   **For OpenAI:**
    ```
+   AI_PROVIDER=openai
    OPENAI_API_KEY=sk-your-openai-api-key (SECRET ✅)
    OPENAI_MODEL=gpt-3.5-turbo
+   CORS_ORIGINS=https://your-frontend.railway.app
+   ```
+   
+   **For Hugging Face:**
+   ```
+   AI_PROVIDER=huggingface
+   HF_API_KEY=hf_your-huggingface-token (SECRET ✅)
+   HF_MODEL=google/flan-t5-large
    CORS_ORIGINS=https://your-frontend.railway.app
    ```
 5. Railway will auto-detect Python and install dependencies
@@ -133,9 +153,9 @@ CORS_ORIGINS=https://your-frontend.railway.app
 ## Troubleshooting
 
 ### "Invalid API key" error
-- Verify `OPENAI_API_KEY` is set as a secret
-- Check the key starts with `sk-` or `sk-proj-`
-- Ensure it's not a Google API key (starts with `AIza`)
+- **For OpenAI**: Verify `OPENAI_API_KEY` is set as a secret, check the key starts with `sk-` or `sk-proj-`, ensure it's not a Google API key (starts with `AIza`)
+- **For Hugging Face**: Verify `HF_API_KEY` is set as a secret, check the key starts with `hf_`, get your token from https://huggingface.co/settings/tokens
+- Verify `AI_PROVIDER` is set correctly (`openai` or `huggingface`)
 
 ### CORS errors
 - Set `CORS_ORIGINS` to your frontend URL

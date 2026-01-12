@@ -40,24 +40,24 @@ if ai_provider == "openai":
 else:
     client = None
 
-# Import Falcon client (only if using Falcon)
-if ai_provider == "falcon":
+# Import Hugging Face client (only if using Hugging Face)
+if ai_provider in ("huggingface", "hf"):
     try:
-        from app.falcon_client import falcon_client
-        if not falcon_client:
-            logger.warning("Falcon client not initialized. Check FALCON_API_BASE_URL environment variable.")
+        from app.huggingface_client import huggingface_client
+        if not huggingface_client:
+            logger.warning("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
     except ImportError:
-        logger.error("Failed to import Falcon client. Make sure falcon_client.py exists.")
-        falcon_client = None
+        logger.error("Failed to import Hugging Face client. Make sure huggingface_client.py exists.")
+        huggingface_client = None
 else:
-    falcon_client = None
+    huggingface_client = None
 
 logger.info(f"AI Provider configured: {ai_provider}")
 
 
 class AIClient:
     """AI client for content generation with retry logic and streaming support.
-    Supports both OpenAI and Falcon API providers based on AI_PROVIDER environment variable.
+    Supports both OpenAI and Hugging Face API providers based on AI_PROVIDER environment variable.
     """
     
     def __init__(self):
@@ -76,10 +76,10 @@ class AIClient:
         """
         if self.provider == "openai":
             return await self._generate_openai(request, prompt_data)
-        elif self.provider == "falcon":
-            return await self._generate_falcon(request, prompt_data)
+        elif self.provider in ("huggingface", "hf"):
+            return await self._generate_huggingface(request, prompt_data)
         else:
-            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'falcon'")
+            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'huggingface', 'hf'")
     
     async def generate_stream_chunks(
         self,
@@ -93,11 +93,11 @@ class AIClient:
         if self.provider == "openai":
             async for chunk in self._generate_openai_chunks(request, prompt_data):
                 yield chunk
-        elif self.provider == "falcon":
-            async for chunk in self._generate_falcon_chunks(request, prompt_data):
+        elif self.provider in ("huggingface", "hf"):
+            async for chunk in self._generate_huggingface_chunks(request, prompt_data):
                 yield chunk
         else:
-            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'falcon'")
+            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'huggingface', 'hf'")
     
     @retry(
         stop=stop_after_attempt(3),
@@ -212,33 +212,33 @@ class AIClient:
             logger.error(f"OpenAI streaming generation error: {e}", exc_info=True)
             raise
     
-    async def _generate_falcon(
+    async def _generate_huggingface(
         self,
         request: Any,
         prompt_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Generate content using Falcon API."""
-        if not falcon_client:
-            raise Exception("Falcon client not initialized. Check FALCON_API_BASE_URL environment variable.")
+        """Generate content using Hugging Face Inference API."""
+        if not huggingface_client:
+            raise Exception("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
         
         try:
-            return await falcon_client.generate_stream(request, prompt_data)
+            return await huggingface_client.generate_stream(request, prompt_data)
         except Exception as e:
-            logger.error(f"Falcon generation error: {e}", exc_info=True)
+            logger.error(f"Hugging Face generation error: {e}", exc_info=True)
             raise
     
-    async def _generate_falcon_chunks(
+    async def _generate_huggingface_chunks(
         self,
         request: Any,
         prompt_data: Dict[str, Any]
     ) -> AsyncGenerator[str, None]:
-        """Generate content in chunks using Falcon API."""
-        if not falcon_client:
-            raise Exception("Falcon client not initialized. Check FALCON_API_BASE_URL environment variable.")
+        """Generate content in chunks using Hugging Face Inference API."""
+        if not huggingface_client:
+            raise Exception("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
         
         try:
-            async for chunk in falcon_client.generate_stream_chunks(request, prompt_data):
+            async for chunk in huggingface_client.generate_stream_chunks(request, prompt_data):
                 yield chunk
         except Exception as e:
-            logger.error(f"Falcon streaming generation error: {e}", exc_info=True)
+            logger.error(f"Hugging Face streaming generation error: {e}", exc_info=True)
             raise
