@@ -84,3 +84,7 @@ frontend/build/
 # OS
 Thumbs.db
 .DS_Store
+
+# Documentation (keep only README.md)
+*.md
+!README.md

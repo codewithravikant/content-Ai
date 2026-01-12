@@ -1,5 +1,6 @@
 import os
 import logging
+import json
 from typing import Dict, Any, AsyncGenerator
 import httpx
 from tenacity import (
@@ -15,8 +16,36 @@ logger = logging.getLogger(__name__)
 # Hugging Face API configuration
 hf_api_key = os.getenv("HF_API_KEY")
 hf_model = os.getenv("HF_MODEL", "google/flan-t5-large")
-hf_base_url = "https://api-inference.huggingface.co"
+# HF now requires router.huggingface.co instead of api-inference.huggingface.co
+hf_base_url = os.getenv("HF_BASE_URL", "https://router.huggingface.co")
 hf_timeout = int(os.getenv("HF_TIMEOUT", "120"))  # Default 120 seconds
+
+# Debug logging (written to NDJSON file). Do not log secrets.
+_DEBUG_LOG_PATH = "/Users/ravikantpandit/codewithravi/Content-AI/.cursor/debug.log"
+_DEBUG_SESSION = "debug-session"
+_DEBUG_RUN = "run1"
+
+
+def _agent_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
+    """Append a small NDJSON log for debug mode; ignore all errors."""
+    try:
+        with open(_DEBUG_LOG_PATH, "a") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": _DEBUG_SESSION,
+                        "runId": _DEBUG_RUN,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(asyncio.get_event_loop().time() * 1000),
+                    }
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
 
 
 class HuggingFaceClient:
@@ -27,7 +56,7 @@ class HuggingFaceClient:
             logger.warning("HF_API_KEY not set. Hugging Face client will not work.")
         self.api_key = hf_api_key
         self.model = hf_model
-        self.base_url = hf_base_url
+        self.base_url = hf_base_url.rstrip("/")
         self.timeout = hf_timeout
         self.api_url = f"{self.base_url}/models/{self.model}"
     
@@ -50,6 +79,17 @@ class HuggingFaceClient:
             raise Exception("Hugging Face API key not configured. Set HF_API_KEY environment variable.")
         
         try:
+            # region agent log
+            _agent_log(
+                hypothesis_id="H1",
+                location="huggingface_client.py:generate_stream:start",
+                message="calling huggingface",
+                data={
+                    "url": self.api_url,
+                    "model": self.model,
+                },
+            )
+            # endregion
             # Combine system and user prompts for Hugging Face (single prompt format)
             combined_prompt = f"{prompt_data['system_prompt']}\n\n{prompt_data['user_prompt']}"
             
@@ -86,6 +126,14 @@ class HuggingFaceClient:
                     json=payload,
                     headers=headers,
                 )
+                # region agent log
+                _agent_log(
+                    hypothesis_id="H1",
+                    location="huggingface_client.py:generate_stream:response",
+                    message="huggingface response status",
+                    data={"status": response.status_code},
+                )
+                # endregion
                 
                 # Handle model loading delays (503) with retry
                 if response.status_code == 503:
@@ -117,6 +165,14 @@ class HuggingFaceClient:
                 content = str(result)
             
             logger.info(f"Hugging Face API generation completed. Content length: {len(content)}")
+            # region agent log
+            _agent_log(
+                hypothesis_id="H1",
+                location="huggingface_client.py:generate_stream:success",
+                message="huggingface success",
+                data={"content_length": len(content)},
+            )
+            # endregion
             
             # Extract token usage if available (HF API doesn't always provide this)
             tokens_used = None
@@ -142,6 +198,14 @@ class HuggingFaceClient:
                 error_msg = error_text
             
             logger.error(f"Hugging Face API HTTP error: {status_code} - {error_msg}")
+            # region agent log
+            _agent_log(
+                hypothesis_id="H1",
+                location="huggingface_client.py:generate_stream:http_error",
+                message="huggingface http error",
+                data={"status": status_code, "error": error_msg},
+            )
+            # endregion
             
             # Provide specific error messages for common status codes
             if status_code == 503:
@@ -160,9 +224,25 @@ class HuggingFaceClient:
             raise Exception(error_message)
         except httpx.RequestError as e:
             logger.error(f"Hugging Face API request error: {e}")
+            # region agent log
+            _agent_log(
+                hypothesis_id="H1",
+                location="huggingface_client.py:generate_stream:request_error",
+                message="huggingface request error",
+                data={"error": str(e)},
+            )
+            # endregion
             raise Exception(f"Failed to connect to Hugging Face API: {str(e)}. Check your network connection and HF_API_KEY.")
         except Exception as e:
             logger.error(f"Hugging Face API generation error: {e}", exc_info=True)
+            # region agent log
+            _agent_log(
+                hypothesis_id="H1",
+                location="huggingface_client.py:generate_stream:exception",
+                message="huggingface exception",
+                data={"error": str(e)},
+            )
+            # endregion
             raise
     
     async def generate_stream_chunks(

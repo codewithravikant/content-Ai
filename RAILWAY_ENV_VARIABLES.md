@@ -152,10 +152,15 @@ CORS_ORIGINS=https://your-frontend.railway.app
 
 ## Troubleshooting
 
+### "Unknown AI provider: falcon" error
+- This means you have `AI_PROVIDER=falcon` set, but Falcon support was removed
+- **Fix**: Change `AI_PROVIDER` to `huggingface` (or `openai`), or delete it to default to OpenAI
+- See [TROUBLESHOOTING_AI_PROVIDER.md](./TROUBLESHOOTING_AI_PROVIDER.md) for detailed instructions
+
 ### "Invalid API key" error
 - **For OpenAI**: Verify `OPENAI_API_KEY` is set as a secret, check the key starts with `sk-` or `sk-proj-`, ensure it's not a Google API key (starts with `AIza`)
 - **For Hugging Face**: Verify `HF_API_KEY` is set as a secret, check the key starts with `hf_`, get your token from https://huggingface.co/settings/tokens
-- Verify `AI_PROVIDER` is set correctly (`openai` or `huggingface`)
+- Verify `AI_PROVIDER` is set correctly (`openai`, `huggingface`, or `hf`), or leave it unset to default to OpenAI
 
 ### CORS errors
 - Set `CORS_ORIGINS` to your frontend URL
