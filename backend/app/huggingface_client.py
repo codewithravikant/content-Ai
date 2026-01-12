@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 # Hugging Face API configuration
 hf_api_key = os.getenv("HF_API_KEY")
 hf_model = os.getenv("HF_MODEL", "google/flan-t5-large")
-# HF now requires router.huggingface.co instead of api-inference.huggingface.co
-hf_base_url = os.getenv("HF_BASE_URL", "https://router.huggingface.co")
+# Use api-inference endpoint (router endpoint may have compatibility issues)
+hf_base_url = os.getenv("HF_BASE_URL", "https://api-inference.huggingface.co")
 hf_timeout = int(os.getenv("HF_TIMEOUT", "120"))  # Default 120 seconds
 
 # Debug logging (written to NDJSON file). Do not log secrets.
