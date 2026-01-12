@@ -90,48 +90,106 @@ Content AI is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_
 
 For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
-## Manual Setup
+## Manual Setup (Local Development)
 
-### Backend Setup
+### Prerequisites
+
+- **Python**: 3.11 or 3.12 (Python 3.13 is not supported - dependencies won't build)
+- **Node.js**: 18+ 
+- **AI Provider**: Either OpenAI API key OR Hugging Face API token
+
+### Step 1: Install Python (if needed)
+
+Check your Python version:
+```bash
+python3 --version
+```
+
+If you don't have Python 3.11 or 3.12, install it:
+
+**macOS (Homebrew):**
+```bash
+brew install python@3.11
+# OR
+brew install python@3.12
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install python3.11 python3.11-venv
+```
+
+### Step 2: Backend Setup
 
 1. **Navigate to backend directory**
    ```bash
    cd backend
    ```
 
-2. **Create virtual environment**
+2. **Create virtual environment** (use python3.11 or python3.12, not python3.13)
    ```bash
-   python3 -m venv venv
+   python3.11 -m venv venv
+   # OR if you have 3.12:
+   # python3.12 -m venv venv
+   
+   # Activate virtual environment
    source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # You should see (venv) in your terminal prompt
    ```
 
-3. **Install dependencies**
+3. **Upgrade pip and install dependencies**
    ```bash
+   python -m pip install --upgrade pip setuptools wheel
    pip install -r requirements.txt
-   # Or if pip is not available, use: pip3 install -r requirements.txt
    ```
 
 4. **Set environment variables**
+
+   **Option A: Using OpenAI**
    ```bash
-   # IMPORTANT: Get your OpenAI API key from https://platform.openai.com/account/api-keys
-   # OpenAI API keys start with "sk-" or "sk-proj-"
-   # Do NOT use Google API keys (which start with "AIza")
+   export AI_PROVIDER=openai
    export OPENAI_API_KEY=sk-your_openai_api_key_here
    export OPENAI_MODEL=gpt-3.5-turbo  # Optional
    ```
    
+   **Option B: Using Hugging Face**
+   ```bash
+   export AI_PROVIDER=huggingface
+   export HF_API_KEY=hf_your-huggingface-token-here
+   export HF_MODEL=google/flan-t5-large  # Optional
+   export HF_TIMEOUT=120  # Optional
+   ```
+   
+   **Get API Keys:**
+   - OpenAI: https://platform.openai.com/account/api-keys (keys start with `sk-`)
+   - Hugging Face: https://huggingface.co/settings/tokens (keys start with `hf_`)
+   
    **Important Notes:**
    - OpenAI API keys always start with `sk-` or `sk-proj-`
-   - If you see an error about "AIza" in your key, you're using a Google API key by mistake
-   - Get your OpenAI API key from: https://platform.openai.com/account/api-keys
+   - Do NOT use Google API keys (which start with `AIza`)
    - See [API_KEY_SETUP.md](./API_KEY_SETUP.md) for detailed setup instructions
 
-5. **Run the server**
+5. **Run the backend server**
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
+   
+   You should see:
+   ```
+   INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+   INFO:     Started reloader process
+   INFO:     Started server process
+   INFO:     Waiting for application startup.
+   ```
+   
+   Backend API will be available at: http://localhost:8000
+   API Documentation: http://localhost:8000/docs
 
-### Frontend Setup
+### Step 3: Frontend Setup
+
+**Open a new terminal window** (keep the backend running in the first terminal)
 
 1. **Navigate to frontend directory**
    ```bash
@@ -152,12 +210,62 @@ For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEP
    ```bash
    npm run dev
    ```
+   
+   You should see:
+   ```
+   VITE v5.x.x  ready in xxx ms
+   
+   ➜  Local:   http://localhost:5173/
+   ➜  Network: use --host to expose
+   ```
+   
+   Frontend will be available at: http://localhost:5173 (or the port shown)
 
-5. **Build for production**
+5. **Build for production** (optional)
    ```bash
    npm run build
    npm run preview
    ```
+
+### Step 4: Verify Setup
+
+1. **Check backend is running:**
+   - Visit http://localhost:8000/health
+   - Should return: `{"status":"healthy","service":"content-ai"}`
+
+2. **Check API documentation:**
+   - Visit http://localhost:8000/docs
+   - You should see the interactive API documentation
+
+3. **Check frontend:**
+   - Visit http://localhost:5173 (or the port shown in terminal)
+   - You should see the Content AI interface
+
+4. **Test content generation:**
+   - Fill out a form (e.g., Blog Post)
+   - Click "Generate"
+   - Content should be generated successfully
+
+### Troubleshooting Local Setup
+
+**Python version issues:**
+- Ensure you're using Python 3.11 or 3.12
+- Check with: `python3 --version`
+- If using 3.13, create venv with: `python3.11 -m venv venv`
+
+**Dependencies won't install:**
+- Upgrade pip: `python -m pip install --upgrade pip setuptools wheel`
+- Use Python 3.11 or 3.12 (3.13 is not supported)
+
+**Backend won't start:**
+- Check environment variables are set: `echo $AI_PROVIDER`
+- Verify API key is correct
+- Check port 8000 is not in use
+
+**Frontend won't connect to backend:**
+- Verify backend is running on http://localhost:8000
+- Check `VITE_API_BASE_URL` in frontend `.env` file
+- Check browser console for CORS errors
 
 ## Environment Variables
 

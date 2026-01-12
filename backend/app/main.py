@@ -191,27 +191,77 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         error_msg = str(e)
-        # Provide better error messages for common authentication issues
-        if "invalid_api_key" in error_msg or "401" in error_msg or "Authentication" in str(type(e).__name__):
-            if "AIza" in error_msg or os.getenv("OPENAI_API_KEY", "").startswith("AIza"):
+        error_type = str(type(e).__name__)
+        
+        # Get current AI provider to determine error handling
+        current_ai_provider = os.getenv("AI_PROVIDER", "openai").lower()
+        
+        # Handle OpenAI-specific errors
+        if current_ai_provider == "openai":
+            if "invalid_api_key" in error_msg or "401" in error_msg or "Authentication" in error_type:
+                if "AIza" in error_msg or os.getenv("OPENAI_API_KEY", "").startswith("AIza"):
+                    raise HTTPException(
+                        status_code=401,
+                        detail=(
+                            "Invalid API key: You're using a Google API key instead of an OpenAI API key. "
+                            "OpenAI API keys start with 'sk-' or 'sk-proj-'. "
+                            "Get your OpenAI API key from: https://platform.openai.com/account/api-keys"
+                        )
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=(
+                            "Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable. "
+                            "Get your API key from: https://platform.openai.com/account/api-keys"
+                        )
+                    )
+        
+        # Handle Hugging Face-specific errors
+        elif current_ai_provider in ("huggingface", "hf"):
+            error_lower = error_msg.lower()
+            
+            if "401" in error_msg or "authentication" in error_lower or "unauthorized" in error_lower:
                 raise HTTPException(
                     status_code=401,
                     detail=(
-                        "Invalid API key: You're using a Google API key instead of an OpenAI API key. "
-                        "OpenAI API keys start with 'sk-' or 'sk-proj-'. "
-                        "Get your OpenAI API key from: https://platform.openai.com/account/api-keys"
+                        "Invalid Hugging Face API key. Please check your HF_API_KEY environment variable. "
+                        "Hugging Face API keys start with 'hf_'. "
+                        "Get your API token from: https://huggingface.co/settings/tokens"
                     )
                 )
-            else:
+            elif "410" in error_msg:
                 raise HTTPException(
-                    status_code=401,
+                    status_code=410,
                     detail=(
-                        "Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable. "
-                        "Get your API key from: https://platform.openai.com/account/api-keys"
+                        "Hugging Face API endpoint error. The API endpoint may have changed. "
+                        "Please check your Hugging Face API configuration."
                     )
                 )
-        raise
-    except Exception as e:
+            elif "429" in error_msg or "rate limit" in error_lower:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "Hugging Face API rate limit exceeded. Please try again later. "
+                        "Consider upgrading your Hugging Face account for higher rate limits."
+                    )
+                )
+            elif "503" in error_msg or "model is loading" in error_lower or "model loading" in error_lower:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Hugging Face model is currently loading. Please wait a few moments and try again. "
+                        f"Model: {os.getenv('HF_MODEL', 'google/flan-t5-large')}"
+                    )
+                )
+            elif "hugging face" in error_lower or "hf_api_key" in error_lower:
+                # Generic Hugging Face error
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Hugging Face API error: {error_msg}. Please check your HF_API_KEY and HF_MODEL configuration."
+                )
+        
+        # Generic error handling for unknown providers or unhandled errors
         logger.error(f"AI generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=503,
