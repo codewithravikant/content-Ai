@@ -38,7 +38,9 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 - Docker and Docker Compose (recommended - avoids Python version issues!)
 - OR Node.js 18+ and Python 3.11 or 3.12 (Python 3.13 not fully supported yet)
-- OpenAI API key
+- **AI Provider**: Either:
+  - OpenAI API key, OR
+  - Falcon AI API accessible via Cloudflare tunnel (see [CLOUDFLARE_TUNNEL_SETUP.md](./CLOUDFLARE_TUNNEL_SETUP.md))
 
 ## Quick Start (Docker)
 
@@ -159,13 +161,24 @@ For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEP
 
 ## Environment Variables
 
-Create a `.env` file in the root directory (or use `.env.example` as a template):
+Create a `.env` file in the root directory:
 
 ```env
-# OpenAI API Configuration
+# AI Provider Configuration (choose one: "openai" or "falcon")
+AI_PROVIDER=openai
+
+# OpenAI API Configuration (when AI_PROVIDER=openai)
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-3.5-turbo
 AI_TIMEOUT=60
+
+# Falcon API Configuration (when AI_PROVIDER=falcon)
+# Base URL of your Falcon API (e.g., Cloudflare tunnel URL)
+FALCON_API_BASE_URL=https://your-falcon-tunnel-url.trycloudflare.com
+# Optional: API key if Falcon requires authentication
+FALCON_API_KEY=your_falcon_api_key_if_needed
+# Optional: Timeout for Falcon API requests (default: 120 seconds)
+FALCON_TIMEOUT=120
 
 # Rate Limiting
 RATE_LIMIT_MAX_REQUESTS=10
@@ -177,7 +190,36 @@ QUOTA_MAX_REQUESTS_PER_DAY=100
 
 # Frontend API URL (optional)
 VITE_API_BASE_URL=http://localhost:8000
+
+# CORS Configuration
+CORS_ORIGINS=*
 ```
+
+### Using Falcon API (Self-Hosted)
+
+Content AI supports using Falcon AI API as an alternative to OpenAI. This is useful when:
+- You want to use a self-hosted AI model
+- You want to avoid OpenAI API costs
+- You have a local Falcon instance accessible via Cloudflare tunnel
+
+**Setup Steps:**
+
+1. **Set up Cloudflare Tunnel** (see [CLOUDFLARE_TUNNEL_SETUP.md](./CLOUDFLARE_TUNNEL_SETUP.md))
+   - Create a tunnel pointing to your local Falcon API
+   - Get the tunnel URL (e.g., `https://your-tunnel-url.trycloudflare.com`)
+
+2. **Configure Environment Variables:**
+   ```env
+   AI_PROVIDER=falcon
+   FALCON_API_BASE_URL=https://your-tunnel-url.trycloudflare.com
+   ```
+
+3. **Start the application** - It will automatically use Falcon instead of OpenAI
+
+**For Railway Deployment:**
+- Set `AI_PROVIDER=falcon` as an environment variable
+- Set `FALCON_API_BASE_URL` to your Cloudflare tunnel URL
+- Keep secrets marked as "Secret" in Railway dashboard
 
 ### Secret Management
 

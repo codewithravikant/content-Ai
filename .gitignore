@@ -44,6 +44,7 @@ frontend/.env
 *.swo
 *~
 .DS_Store
+.cursor/plans/
 
 # Logs
 *.log
