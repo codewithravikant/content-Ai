@@ -1,244 +1,158 @@
 import os
 import logging
-from typing import Dict, Any, AsyncGenerator
-from openai import AsyncOpenAI
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
 import asyncio
+from typing import Dict, Any, AsyncGenerator
+
+from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
 
-# Determine which AI provider to use
-ai_provider = os.getenv("AI_PROVIDER", "openai").lower()
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Initialize OpenAI client (only if using OpenAI)
-if ai_provider == "openai":
-    api_key = os.getenv("OPENAI_API_KEY")
+
+def _build_openrouter_client() -> AsyncOpenAI | None:
+    api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        logger.warning("OPENAI_API_KEY not set. AI generation will fail.")
-    elif api_key.startswith("AIza"):
-        logger.error(
-            "Invalid API key format detected. The key appears to be a Google API key (starts with 'AIza'). "
-            "OpenAI API keys should start with 'sk-' or 'sk-proj-'. "
-            "Please get your OpenAI API key from https://platform.openai.com/account/api-keys"
-        )
-        raise ValueError(
-            "Invalid API key: OpenAI API keys must start with 'sk-' or 'sk-proj-'. "
-            "You provided a key that starts with 'AIza' which appears to be a Google API key. "
-            "Get your OpenAI API key from: https://platform.openai.com/account/api-keys"
-        )
-    elif not (api_key.startswith("sk-") or api_key.startswith("sk-proj-")):
-        logger.warning(
-            f"API key format may be incorrect. OpenAI keys typically start with 'sk-' or 'sk-proj-'. "
-            f"Your key starts with: {api_key[:4]}..."
-        )
-    client = AsyncOpenAI(api_key=api_key) if api_key else None
-else:
-    client = None
+        logger.warning("OPENROUTER_API_KEY not set. AI generation will fail.")
+        return None
 
-# Import Hugging Face client (only if using Hugging Face)
-if ai_provider in ("huggingface", "hf"):
-    try:
-        from app.huggingface_client import huggingface_client
-        if not huggingface_client:
-            logger.warning("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
-    except ImportError:
-        logger.error("Failed to import Hugging Face client. Make sure huggingface_client.py exists.")
-        huggingface_client = None
-else:
-    huggingface_client = None
+    app_url = os.getenv("APP_URL", "http://localhost:3000")
+    app_title = os.getenv("APP_TITLE", "Ghostwriter")
+    return AsyncOpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=api_key,
+        default_headers={
+            "HTTP-Referer": app_url,
+            "X-Title": app_title,
+        },
+    )
 
-logger.info(f"AI Provider configured: {ai_provider}")
+
+client = _build_openrouter_client()
 
 
 class AIClient:
-    """AI client for content generation with retry logic and streaming support.
-    Supports both OpenAI and Hugging Face API providers based on AI_PROVIDER environment variable.
-    """
-    
+    """OpenRouter client with retry logic and streaming support."""
+
     def __init__(self):
-        self.provider = ai_provider
-        self.model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")  # Only used for OpenAI
+        self.provider = "openrouter"
+        self.model = os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")
         self.timeout = int(os.getenv("AI_TIMEOUT", "60"))
-    
-    async def generate_stream(
-        self,
-        request: Any,
-        prompt_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Generate content using AI with streaming support.
-        Routes to appropriate provider based on AI_PROVIDER setting.
-        """
-        if self.provider == "openai":
-            return await self._generate_openai(request, prompt_data)
-        elif self.provider in ("huggingface", "hf"):
-            return await self._generate_huggingface(request, prompt_data)
-        else:
-            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'huggingface', 'hf'")
-    
-    async def generate_stream_chunks(
-        self,
-        request: Any,
-        prompt_data: Dict[str, Any]
-    ) -> AsyncGenerator[str, None]:
-        """
-        Generate content in chunks for SSE streaming.
-        Routes to appropriate provider based on AI_PROVIDER setting.
-        """
-        if self.provider == "openai":
-            async for chunk in self._generate_openai_chunks(request, prompt_data):
-                yield chunk
-        elif self.provider in ("huggingface", "hf"):
-            async for chunk in self._generate_huggingface_chunks(request, prompt_data):
-                yield chunk
-        else:
-            raise ValueError(f"Unknown AI provider: {self.provider}. Supported providers: 'openai', 'huggingface', 'hf'")
-    
+        logger.info("Initialized AIClient with provider: %s, model: %s", self.provider, self.model)
+
+    def _require_client(self) -> AsyncOpenAI:
+        if not client:
+            raise Exception("OpenRouter client not initialized. Check OPENROUTER_API_KEY environment variable.")
+        return client
+
+    @staticmethod
+    def _extract_params(request: Any) -> tuple[float, int, float]:
+        gen_params = request.generation_params or {}
+        temperature = gen_params.temperature if hasattr(gen_params, "temperature") else 0.7
+        max_tokens = gen_params.max_tokens if hasattr(gen_params, "max_tokens") else 2000
+        top_p = gen_params.top_p if hasattr(gen_params, "top_p") else 0.9
+        return temperature, max_tokens, top_p
+
+    async def _generate_openrouter(self, request: Any, prompt_data: Dict[str, Any]) -> Dict[str, Any]:
+        api = self._require_client()
+        temperature, max_tokens, top_p = self._extract_params(request)
+        messages = [
+            {"role": "system", "content": prompt_data["system_prompt"]},
+            {"role": "user", "content": prompt_data["user_prompt"]},
+        ]
+
+        logger.info(
+            "Calling OpenRouter model: %s, temperature: %s, max_tokens: %s",
+            self.model,
+            temperature,
+            max_tokens,
+        )
+
+        stream = await api.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            stream=True,
+            timeout=self.timeout,
+        )
+
+        full_content = ""
+        final_chunk = None
+        async for chunk in stream:
+            final_chunk = chunk
+            delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+            if delta:
+                full_content += delta
+
+        tokens_used = None
+        if final_chunk and getattr(final_chunk, "usage", None):
+            tokens_used = final_chunk.usage.total_tokens
+
+        logger.info("Generation completed. Content length: %s, Tokens: %s", len(full_content), tokens_used)
+        return {
+            "content": full_content.strip(),
+            "metadata": {
+                "tokens_used": tokens_used,
+                "model": self.model,
+                "provider": self.provider,
+            },
+        }
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((Exception,)),
         reraise=True,
     )
-    async def _generate_openai(
-        self,
-        request: Any,
-        prompt_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Generate content using OpenAI API."""
-        if not client:
-            raise Exception("OpenAI client not initialized. Check OPENAI_API_KEY environment variable.")
-        
+    async def generate_stream(self, request: Any, prompt_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            # Build messages
-            messages = [
-                {"role": "system", "content": prompt_data["system_prompt"]},
-                {"role": "user", "content": prompt_data["user_prompt"]},
-            ]
-            
-            # Get generation parameters
-            gen_params = request.generation_params or {}
-            temperature = gen_params.temperature if hasattr(gen_params, 'temperature') else 0.7
-            max_tokens = gen_params.max_tokens if hasattr(gen_params, 'max_tokens') else 2000
-            top_p = gen_params.top_p if hasattr(gen_params, 'top_p') else 0.9
-            
-            logger.info(f"Calling OpenAI model: {self.model}, temperature: {temperature}, max_tokens: {max_tokens}")
-            
-            # Call OpenAI API with streaming
-            stream = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=top_p,
-                stream=True,
-                timeout=self.timeout,
-            )
-            
-            # Collect streamed content
-            full_content = ""
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    full_content += chunk.choices[0].delta.content
-            
-            # Get token usage from last chunk (if available)
-            tokens_used = None
-            if hasattr(chunk, 'usage') and chunk.usage:
-                tokens_used = chunk.usage.total_tokens
-            
-            logger.info(f"OpenAI generation completed. Content length: {len(full_content)}, Tokens: {tokens_used}")
-            
-            return {
-                "content": full_content.strip(),
-                "metadata": {
-                    "tokens_used": tokens_used,
-                    "model": self.model,
-                },
-            }
-            
+            return await self._generate_openrouter(request, prompt_data)
         except Exception as e:
-            logger.error(f"OpenAI generation error: {e}", exc_info=True)
+            logger.error("AI generation error: %s", e, exc_info=True)
             raise
-    
-    async def _generate_openai_chunks(
+
+    async def _generate_openrouter_chunks(
         self,
         request: Any,
-        prompt_data: Dict[str, Any]
+        prompt_data: Dict[str, Any],
     ) -> AsyncGenerator[str, None]:
-        """Generate content in chunks using OpenAI API."""
-        if not client:
-            raise Exception("OpenAI client not initialized. Check OPENAI_API_KEY environment variable.")
-        
-        try:
-            # Build messages
-            messages = [
-                {"role": "system", "content": prompt_data["system_prompt"]},
-                {"role": "user", "content": prompt_data["user_prompt"]},
-            ]
-            
-            # Get generation parameters
-            gen_params = request.generation_params or {}
-            temperature = gen_params.temperature if hasattr(gen_params, 'temperature') else 0.7
-            max_tokens = gen_params.max_tokens if hasattr(gen_params, 'max_tokens') else 2000
-            top_p = gen_params.top_p if hasattr(gen_params, 'top_p') else 0.9
-            
-            logger.info(f"Starting OpenAI streaming generation: {self.model}")
-            
-            # Call OpenAI API with streaming
-            stream = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=top_p,
-                stream=True,
-                timeout=self.timeout,
-            )
-            
-            # Yield chunks as they arrive
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-                    await asyncio.sleep(0)  # Yield control to event loop
-            
-            logger.info("OpenAI streaming generation completed")
-            
-        except Exception as e:
-            logger.error(f"OpenAI streaming generation error: {e}", exc_info=True)
-            raise
-    
-    async def _generate_huggingface(
+        api = self._require_client()
+        temperature, max_tokens, top_p = self._extract_params(request)
+        messages = [
+            {"role": "system", "content": prompt_data["system_prompt"]},
+            {"role": "user", "content": prompt_data["user_prompt"]},
+        ]
+
+        logger.info("Starting OpenRouter streaming generation: %s", self.model)
+        stream = await api.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            stream=True,
+            timeout=self.timeout,
+        )
+
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+            if delta:
+                yield delta
+                await asyncio.sleep(0)
+
+        logger.info("Streaming generation completed")
+
+    async def generate_stream_chunks(
         self,
         request: Any,
-        prompt_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Generate content using Hugging Face Inference API."""
-        if not huggingface_client:
-            raise Exception("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
-        
-        try:
-            return await huggingface_client.generate_stream(request, prompt_data)
-        except Exception as e:
-            logger.error(f"Hugging Face generation error: {e}", exc_info=True)
-            raise
-    
-    async def _generate_huggingface_chunks(
-        self,
-        request: Any,
-        prompt_data: Dict[str, Any]
+        prompt_data: Dict[str, Any],
     ) -> AsyncGenerator[str, None]:
-        """Generate content in chunks using Hugging Face Inference API."""
-        if not huggingface_client:
-            raise Exception("Hugging Face client not initialized. Check HF_API_KEY environment variable.")
-        
         try:
-            async for chunk in huggingface_client.generate_stream_chunks(request, prompt_data):
+            async for chunk in self._generate_openrouter_chunks(request, prompt_data):
                 yield chunk
         except Exception as e:
-            logger.error(f"Hugging Face streaming generation error: {e}", exc_info=True)
+            logger.error("Streaming generation error: %s", e, exc_info=True)
             raise

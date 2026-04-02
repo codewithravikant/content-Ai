@@ -11,7 +11,7 @@ interface LinkedInFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'content_ai_linkedin_form'
+const STORAGE_KEY = 'ghostwriter_linkedin_form'
 
 export function LinkedInForm({ onGenerate, onGenerateStart, onError }: LinkedInFormProps) {
   const {
@@ -72,8 +72,8 @@ export function LinkedInForm({ onGenerate, onGenerateStart, onError }: LinkedInF
         },
       })
       onGenerate(response.content)
-    } catch (error: any) {
-      onError(error.message || 'Failed to generate content')
+    } catch (error: unknown) {
+      onError(error instanceof Error ? error.message : 'Failed to generate content')
     }
   }
 

@@ -1,0 +1,68 @@
+Ghostwriter - Spec Compliance Status (Brief)
+Generated: 2026-03-25 (Wednesday)
+
+PWD
+/Users/ravikantpandit/koodsisu/ghostwriter
+
+Git state
+Branch: main
+Last commit: 59b812f makefile
+Working tree: clean (no uncommitted changes)
+
+High-level file structure
+- backend/
+  - app/
+    - main.py
+    - schemas.py
+    - normalization.py
+    - prompts/
+      - blog.py, email.py, social_media.py, linkedin.py, job_application.py
+    - postprocess.py
+    - pdf_export.py
+    - ai_client.py, huggingface_client.py, rate_limiter.py, quota.py, etc.
+  - tests/
+  - Dockerfile, requirements.txt, pyproject.toml
+  - .env.example (backend-local)
+- frontend/
+  - src/
+    - App.tsx
+    - components/
+      - ContentEditor.tsx, ContentTypeSelector.tsx, ErrorBoundary.tsx
+      - forms/
+        - BlogPostForm.tsx, EmailForm.tsx, SocialMediaForm.tsx, LinkedInForm.tsx, JobApplicationForm.tsx
+  - package.json / package-lock.json, Vite/Tailwind config, Dockerfile.nginx
+- extras/ (setup/docs/supporting notes)
+- scripts/ (helper scripts, e.g. generate-types.sh)
+- .cursor/
+  - plans/ghostwriter_spec_compliance_plan_e515a559.plan.md (current spec compliance checklist)
+- Repository root docs/config:
+  - README.md
+  - docker-compose.yml, Makefile, Procfile, nixpacks.toml, railway.toml
+
+What has been done (per the existing compliance plan + current repo contents)
+- Core multi-format export is present:
+  - editable output in the UI, then export to multiple formats (TXT/MD/HTML/PDF).
+- Input handling is implemented with type-specific context/specs:
+  - backend schemas + normalization validate/normalize requests.
+  - prompt templates exist per content type (blog/email/social media/linkedin/job application).
+- AI integration + post-processing are implemented:
+  - AI provider integration, error handling, response extraction, and content post-processing (structure + sanitization + word-count validation).
+- Docker workflow exists:
+  - documented one-step run uses `docker-compose up --build`.
+- UI forms exist for all implemented content types:
+  - frontend has forms for Blog, Email, Social Media, LinkedIn, Job Application.
+
+What is pending (gaps called out by the plan, verified against current code/doc references)
+1) Root `.env.example` is missing
+   - README instructs: `cp .env.example .env`
+   - Repo root does NOT currently have `.env.example`
+   - Backend does have `backend/.env.example`, but the root template is still missing.
+
+2) Optional: Story content type is not implemented
+   - No `StoryForm` in `frontend/src/components/forms/`
+   - No Story-related `story.py` / story content type references found in backend code
+   - Plan notes this is optional because the spec’s “at least 2 types” requirement is already satisfied.
+
+3) Optional documentation improvements (not blocking core functionality)
+   - The plan suggests optionally adding a single-command/quick-start script or explicit “run the whole app” snippet in README (current setup already supports `docker-compose up --build`).
+

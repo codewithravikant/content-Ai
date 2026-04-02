@@ -1,14 +1,14 @@
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, APIRouter
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse, JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Dict, Any
 import json
-import os
-from pathlib import Path
 
 from app.schemas import GenerateRequest, GenerateResponse, ExportPDFRequest
 from app.normalization import normalize_request, validate_request
@@ -32,14 +32,14 @@ cache = get_cache()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting Content AI API")
+    logger.info("Starting Ghostwriter API")
     yield
     # Shutdown
-    logger.info("Shutting down Content AI API")
+    logger.info("Shutting down Ghostwriter API")
 
 
 app = FastAPI(
-    title="Content AI API",
+    title="Ghostwriter API",
     description="AI Content Generation Platform",
     version="1.0.0",
     lifespan=lifespan,
@@ -47,6 +47,7 @@ app = FastAPI(
 
 # CORS middleware
 # Get allowed origins from environment variable or default to wildcard
+import os
 allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -58,36 +59,6 @@ app.add_middleware(
 
 # Initialize AI client
 ai_client = AIClient()
-
-# Create API router with /api prefix
-api_router = APIRouter(prefix="/api")
-
-# Mount static files for frontend (only if frontend/dist exists)
-# This allows single-service deployment from root directory
-# Try multiple path resolutions for different deployment scenarios
-_frontend_dist_path = None
-possible_paths = [
-    Path(__file__).parent.parent.parent / "frontend" / "dist",  # From backend/app/main.py -> /app/frontend/dist
-    Path.cwd().parent / "frontend" / "dist",  # If running from backend/ -> ../frontend/dist
-    Path("/app") / "frontend" / "dist",  # Absolute path in Railway
-]
-
-for path in possible_paths:
-    if path.exists():
-        _frontend_dist_path = path
-        logger.info(f"Found frontend dist at: {_frontend_dist_path}")
-        break
-
-if _frontend_dist_path and _frontend_dist_path.exists():
-    assets_dir = _frontend_dist_path / "assets"
-    if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-        logger.info(f"Mounted frontend assets from {assets_dir}")
-    else:
-        logger.warning(f"Frontend dist found at {_frontend_dist_path} but assets directory not found")
-else:
-    logger.warning(f"Frontend dist not found. Tried paths: {[str(p) for p in possible_paths]}")
-    _frontend_dist_path = None
 
 
 @app.middleware("http")
@@ -111,7 +82,7 @@ async def logging_middleware(request: Request, call_next):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "content-ai"}
+    return {"status": "healthy", "service": "ghostwriter"}
 
 
 @app.get("/metrics")
@@ -123,25 +94,7 @@ async def metrics():
     }
 
 
-@app.get("/debug/paths")
-async def debug_paths():
-    """Debug endpoint to check file paths."""
-    debug_paths = [
-        Path(__file__).parent.parent.parent / "frontend" / "dist",
-        Path.cwd().parent / "frontend" / "dist",
-        Path("/app") / "frontend" / "dist",
-    ]
-    return {
-        "cwd": str(Path.cwd()),
-        "__file__": str(__file__),
-        "frontend_dist_path": str(_frontend_dist_path) if _frontend_dist_path else None,
-        "frontend_dist_exists": _frontend_dist_path.exists() if _frontend_dist_path else False,
-        "possible_paths": [str(p) for p in debug_paths],
-        "path_checks": {str(p): p.exists() for p in debug_paths},
-    }
-
-
-@api_router.post("/generate", response_model=GenerateResponse)
+@app.post("/generate", response_model=GenerateResponse)
 async def generate_content(req: GenerateRequest, http_request: Request, background_tasks: BackgroundTasks):
     """
     Generate content based on user input.
@@ -183,6 +136,7 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
     
     # Call AI service
     start_time = time.time()
+
     try:
         ai_response = await ai_client.generate_stream(normalized, prompt_data)
     except ValueError as e:
@@ -191,77 +145,17 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         error_msg = str(e)
-        error_type = str(type(e).__name__)
-        
-        # Get current AI provider to determine error handling
-        current_ai_provider = os.getenv("AI_PROVIDER", "openai").lower()
-        
-        # Handle OpenAI-specific errors
-        if current_ai_provider == "openai":
-            if "invalid_api_key" in error_msg or "401" in error_msg or "Authentication" in error_type:
-                if "AIza" in error_msg or os.getenv("OPENAI_API_KEY", "").startswith("AIza"):
-                    raise HTTPException(
-                        status_code=401,
-                        detail=(
-                            "Invalid API key: You're using a Google API key instead of an OpenAI API key. "
-                            "OpenAI API keys start with 'sk-' or 'sk-proj-'. "
-                            "Get your OpenAI API key from: https://platform.openai.com/account/api-keys"
-                        )
-                    )
-                else:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=(
-                            "Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable. "
-                            "Get your API key from: https://platform.openai.com/account/api-keys"
-                        )
-                    )
-        
-        # Handle Hugging Face-specific errors
-        elif current_ai_provider in ("huggingface", "hf"):
-            error_lower = error_msg.lower()
-            
-            if "401" in error_msg or "authentication" in error_lower or "unauthorized" in error_lower:
-                raise HTTPException(
-                    status_code=401,
-                    detail=(
-                        "Invalid Hugging Face API key. Please check your HF_API_KEY environment variable. "
-                        "Hugging Face API keys start with 'hf_'. "
-                        "Get your API token from: https://huggingface.co/settings/tokens"
-                    )
+        # Provide better error messages for common authentication issues
+        if "invalid_api_key" in error_msg or "401" in error_msg or "Authentication" in str(type(e).__name__):
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY environment variable. "
+                    "Get your API key from: https://openrouter.ai/keys"
                 )
-            elif "410" in error_msg:
-                raise HTTPException(
-                    status_code=410,
-                    detail=(
-                        "Hugging Face API endpoint error. The API endpoint may have changed. "
-                        "Please check your Hugging Face API configuration."
-                    )
-                )
-            elif "429" in error_msg or "rate limit" in error_lower:
-                raise HTTPException(
-                    status_code=429,
-                    detail=(
-                        "Hugging Face API rate limit exceeded. Please try again later. "
-                        "Consider upgrading your Hugging Face account for higher rate limits."
-                    )
-                )
-            elif "503" in error_msg or "model is loading" in error_lower or "model loading" in error_lower:
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        "Hugging Face model is currently loading. Please wait a few moments and try again. "
-                        f"Model: {os.getenv('HF_MODEL', 'google/flan-t5-large')}"
-                    )
-                )
-            elif "hugging face" in error_lower or "hf_api_key" in error_lower:
-                # Generic Hugging Face error
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Hugging Face API error: {error_msg}. Please check your HF_API_KEY and HF_MODEL configuration."
-                )
-        
-        # Generic error handling for unknown providers or unhandled errors
+            )
+        raise
+    except Exception as e:
         logger.error(f"AI generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=503,
@@ -327,7 +221,7 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
     return GenerateResponse(content=processed["content"], metadata=metadata)
 
 
-@api_router.get("/generate/stream")
+@app.get("/generate/stream")
 async def generate_content_stream(http_request: Request):
     """
     Stream content generation using Server-Sent Events (SSE).
@@ -390,7 +284,7 @@ async def generate_content_stream(http_request: Request):
     )
 
 
-@api_router.post("/export/pdf")
+@app.post("/export/pdf")
 async def export_pdf(request: ExportPDFRequest):
     """
     Export content to PDF format (backend rendering).
@@ -403,7 +297,7 @@ async def export_pdf(request: ExportPDFRequest):
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=content-ai-{request.content_type}-{int(time.time())}.pdf"}
+            headers={"Content-Disposition": f"attachment; filename=ghostwriter-{request.content_type}-{int(time.time())}.pdf"}
         )
     except Exception as e:
         logger.error(f"PDF export error: {e}")
@@ -414,43 +308,6 @@ async def log_token_usage(client_ip: str, tokens: int, content_type: str, model:
     """Background task to log token usage for monitoring."""
     from app.logging_config import log_token_usage as log_token
     log_token(client_ip, tokens, content_type, model)
-
-
-# Include API router (routes will be prefixed with /api)
-app.include_router(api_router)
-
-
-@app.get("/")
-async def serve_index():
-    """Serve frontend index.html at root."""
-    if not _frontend_dist_path:
-        raise HTTPException(status_code=404, detail="Frontend not found")
-    index_path = _frontend_dist_path / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    raise HTTPException(status_code=404, detail="Frontend index.html not found")
-
-
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    """
-    Serve frontend SPA - catch-all route for client-side routing.
-    Only serves frontend if it's not an API route.
-    """
-    # Don't interfere with API routes
-    if full_path.startswith(("api/", "generate", "export", "health", "metrics", "docs", "openapi.json")):
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    if not _frontend_dist_path:
-        raise HTTPException(status_code=404, detail="Frontend not found")
-    
-    # Serve index.html for SPA routing
-    index_path = _frontend_dist_path / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    
-    # If no frontend, return 404
-    raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 
 @app.exception_handler(Exception)

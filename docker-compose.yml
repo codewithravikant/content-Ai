@@ -5,12 +5,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: content-ai-backend
+    container_name: ghostwriter-backend
     ports:
       - "8000:8000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-3.5-turbo}
+      - APP_URL=${APP_URL:-http://localhost:3000}
       - AI_TIMEOUT=${AI_TIMEOUT:-60}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-10}
       - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
@@ -19,7 +20,7 @@ services:
     volumes:
       - ./backend:/app
     networks:
-      - content-ai-network
+      - ghostwriter-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -31,7 +32,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.nginx
-    container_name: content-ai-frontend
+    container_name: ghostwriter-frontend
     ports:
       - "3000:80"
     environment:
@@ -39,7 +40,7 @@ services:
     depends_on:
       - backend
     networks:
-      - content-ai-network
+      - ghostwriter-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
@@ -48,5 +49,5 @@ services:
       retries: 3
 
 networks:
-  content-ai-network:
+  ghostwriter-network:
     driver: bridge

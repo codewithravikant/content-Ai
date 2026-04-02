@@ -21,6 +21,7 @@ export async function generateContent(request: GenerateRequest): Promise<Generat
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<{ detail?: string }>
       const message = axiosError.response?.data?.detail || axiosError.message || 'Failed to generate content'
+
       throw new Error(message)
     }
     throw error

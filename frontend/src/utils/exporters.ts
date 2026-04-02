@@ -12,7 +12,7 @@ export function exportToPlainText(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `content-ai-${Date.now()}.txt`
+  a.download = `ghostwriter-content-${Date.now()}.txt`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -26,7 +26,7 @@ export function exportToMarkdown(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `content-ai-${Date.now()}.md`
+  a.download = `ghostwriter-content-${Date.now()}.md`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -35,7 +35,7 @@ export function exportToMarkdown(content: string): void {
 
 export function exportToHTML(content: string): void {
   // Convert markdown to HTML (simple conversion)
-  let htmlContent = content
+  const htmlContent = content
     .replace(/^# (.*$)/gim, '<h1>$1</h1>')
     .replace(/^## (.*$)/gim, '<h2>$1</h2>')
     .replace(/^### (.*$)/gim, '<h3>$1</h3>')
@@ -48,7 +48,7 @@ export function exportToHTML(content: string): void {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Content AI</title>
+  <title>Ghostwriter Content</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -76,7 +76,7 @@ export function exportToHTML(content: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `content-ai-${Date.now()}.html`
+  a.download = `ghostwriter-content-${Date.now()}.html`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -102,7 +102,7 @@ export async function exportToPDF(content: string, contentType: ContentType): Pr
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `content-ai-${contentType}-${Date.now()}.pdf`
+    a.download = `ghostwriter-${contentType}-${Date.now()}.pdf`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

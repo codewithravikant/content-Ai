@@ -72,7 +72,7 @@ def test_invalid_temperature():
 def test_invalid_word_target():
     """Test invalid word target range."""
     with pytest.raises(Exception):
-        BlogPostSpecifications(word_target=50)  # Should be >= 100
+        BlogPostSpecifications(word_target=10)  # Below minimum of 50
 
 
 def test_empty_context():

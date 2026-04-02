@@ -11,7 +11,7 @@ interface JobApplicationFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'content_ai_job_application_form'
+const STORAGE_KEY = 'ghostwriter_job_application_form'
 
 export function JobApplicationForm({ onGenerate, onGenerateStart, onError }: JobApplicationFormProps) {
   const {
@@ -72,8 +72,8 @@ export function JobApplicationForm({ onGenerate, onGenerateStart, onError }: Job
         },
       })
       onGenerate(response.content)
-    } catch (error: any) {
-      onError(error.message || 'Failed to generate content')
+    } catch (error: unknown) {
+      onError(error instanceof Error ? error.message : 'Failed to generate content')
     }
   }
 

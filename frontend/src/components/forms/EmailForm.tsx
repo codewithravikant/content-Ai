@@ -11,7 +11,7 @@ interface EmailFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'content_ai_email_form'
+const STORAGE_KEY = 'ghostwriter_email_form'
 
 export function EmailForm({ onGenerate, onGenerateStart, onError }: EmailFormProps) {
   const {
@@ -71,8 +71,8 @@ export function EmailForm({ onGenerate, onGenerateStart, onError }: EmailFormPro
         },
       })
       onGenerate(response.content)
-    } catch (error: any) {
-      onError(error.message || 'Failed to generate content')
+    } catch (error: unknown) {
+      onError(error instanceof Error ? error.message : 'Failed to generate content')
     }
   }
 

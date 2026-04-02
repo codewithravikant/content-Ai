@@ -11,7 +11,7 @@ interface SocialMediaFormProps {
   onError: (error: string) => void
 }
 
-const STORAGE_KEY = 'content_ai_social_media_form'
+const STORAGE_KEY = 'ghostwriter_social_media_form'
 
 export function SocialMediaForm({ onGenerate, onGenerateStart, onError }: SocialMediaFormProps) {
   const {
@@ -47,6 +47,7 @@ export function SocialMediaForm({ onGenerate, onGenerateStart, onError }: Social
   }, [setValue])
 
   const formData = watch()
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(formData))
@@ -58,6 +59,7 @@ export function SocialMediaForm({ onGenerate, onGenerateStart, onError }: Social
     try {
       onGenerateStart()
       const wordTarget = normalizeWordCount(data.word_count || '50-300')
+
       const response = await generateContent({
         content_type: 'social_media',
         context: {
@@ -71,9 +73,12 @@ export function SocialMediaForm({ onGenerate, onGenerateStart, onError }: Social
           word_target: wordTarget,
         },
       })
+
       onGenerate(response.content)
-    } catch (error: any) {
-      onError(error.message || 'Failed to generate content')
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to generate content'
+
+      onError(msg)
     }
   }
 

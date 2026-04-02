@@ -46,7 +46,8 @@ class EmailContext(BaseModel):
 
 
 class SocialMediaContext(BaseModel):
-    platform: str = Field(..., min_length=2, max_length=50)
+    # "x" (formerly Twitter) is a valid one-character platform value.
+    platform: str = Field(..., min_length=1, max_length=50)
     topic: str = Field(..., min_length=3, max_length=500)
     tone: Tone
     goal: Optional[str] = Field(None, max_length=200)

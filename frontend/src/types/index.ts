@@ -24,8 +24,8 @@ export interface EmailInput {
 
 export interface GenerateRequest {
   content_type: ContentType
-  context: Record<string, any>
-  specifications: Record<string, any>
+  context: Record<string, unknown>
+  specifications: Record<string, unknown>
   generation_params?: {
     temperature?: number
     max_tokens?: number

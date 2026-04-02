@@ -46,7 +46,8 @@ export function normalizeWordCount(wordCount: string): number {
 
 // New content type schemas
 export const socialMediaSchema = z.object({
-  platform: z.string().min(2, 'Platform must be at least 2 characters').max(50),
+  // "x" (formerly Twitter) is a valid one-character platform value.
+  platform: z.string().min(1, 'Platform must be at least 1 character').max(50),
   topic: z.string().min(3, 'Topic must be at least 3 characters').max(500),
   tone: z.enum(['professional', 'casual', 'friendly', 'formal', 'engaging', 'persuasive'], {
     errorMap: () => ({ message: 'Please select a valid tone' }),

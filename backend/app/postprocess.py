@@ -148,18 +148,21 @@ def validate_word_count(actual: int, target: int, tolerance: float = 0.1) -> boo
 
 def standardize_formatting(content: str) -> str:
     """Standardize markdown formatting and spacing."""
+    # Collapse multiple spaces within lines (but not leading indentation)
+    content = re.sub(r"(?<=\S) {2,}", " ", content)
+
+    # Normalize header spacing: collapse spaces between ## and header text
+    content = re.sub(r"^(#{1,6}) {2,}", r"\1 ", content, flags=re.MULTILINE)
+
     # Fix unclosed headers (rare but possible)
     content = re.sub(r"^##+[^#\n]*$", lambda m: m.group(0) + "\n", content, flags=re.MULTILINE)
-    
+
     # Standardize spacing around headers
     content = re.sub(r"\n{3,}", "\n\n", content)
-    
-    # Fix inconsistent capitalization in headers (optional)
-    # content = re.sub(r"^## (.+)$", lambda m: f"## {m.group(1).title()}", content, flags=re.MULTILINE)
-    
-    # Remove trailing whitespace
+
+    # Remove trailing whitespace per line
     content = re.sub(r" +$", "", content, flags=re.MULTILINE)
-    
+
     return content.strip()
 
 

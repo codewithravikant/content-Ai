@@ -1,4 +1,4 @@
-# Content AI - AI Content Generation Platform
+# Ghostwriter - AI Content Generation Platform
 
 A powerful content generation platform that uses AI to create ready-to-use content for blogs, emails, stories, and social media posts. Built with React (Vite) frontend and FastAPI backend, featuring streaming responses, comprehensive validation, and multiple export formats.
 
@@ -23,7 +23,7 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│   React     │────────▶│   FastAPI   │────────▶│   OpenAI    │
+│   React     │────────▶│   FastAPI   │────────▶│ OpenRouter  │
 │  Frontend   │◀────────│   Backend   │◀────────│   API       │
 └─────────────┘         └─────────────┘         └─────────────┘
      │                        │
@@ -38,22 +38,20 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 - Docker and Docker Compose (recommended - avoids Python version issues!)
 - OR Node.js 18+ and Python 3.11 or 3.12 (Python 3.13 not fully supported yet)
-- **AI Provider**: Either:
-  - OpenAI API key, OR
-  - Falcon AI API accessible via Cloudflare tunnel (see [CLOUDFLARE_TUNNEL_SETUP.md](./CLOUDFLARE_TUNNEL_SETUP.md))
-  Hugging Face API token (see setup instructions below)
+- OpenRouter API key
+
 ## Quick Start (Docker)
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/codewithravikant/content-Ai.git
-   cd Content-AI
+   git clone <repository-url>
+   cd ghostwriter
    ```
 
 2. **Create environment file**
    ```bash
    cp .env.example .env
-   # Edit .env and add your OPENAI_API_KEY
+   # Edit .env and add your OPENROUTER_API_KEY
    ```
 
 3. **Run with Docker Compose** (single command)
@@ -74,7 +72,7 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 ## Deploy on Railway
 
-Content AI is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
+Ghostwriter is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
 
 **Quick Railway Deployment:**
 
@@ -82,7 +80,7 @@ Content AI is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_
 2. Create a new Railway project
 3. Deploy backend service:
    - Root directory: `backend`
-   - Set `OPENAI_API_KEY` environment variable
+   - Set `OPENROUTER_API_KEY` environment variable
 4. Deploy frontend service:
    - Root directory: `frontend`
    - Set `VITE_API_BASE_URL` to your backend Railway URL
@@ -90,106 +88,46 @@ Content AI is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_
 
 For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
-## Manual Setup (Local Development)
+## Manual Setup
 
-### Prerequisites
-
-- **Python**: 3.11 or 3.12 (Python 3.13 is not supported - dependencies won't build)
-- **Node.js**: 18+ 
-- **AI Provider**: Either OpenAI API key OR Hugging Face API token
-
-### Step 1: Install Python (if needed)
-
-Check your Python version:
-```bash
-python3 --version
-```
-
-If you don't have Python 3.11 or 3.12, install it:
-
-**macOS (Homebrew):**
-```bash
-brew install python@3.11
-# OR
-brew install python@3.12
-```
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install python3.11 python3.11-venv
-```
-
-### Step 2: Backend Setup
+### Backend Setup
 
 1. **Navigate to backend directory**
    ```bash
    cd backend
    ```
 
-2. **Create virtual environment** (use python3.11 or python3.12, not python3.13)
+2. **Create virtual environment**
    ```bash
-   python3.11 -m venv venv
-   # OR if you have 3.12:
-   # python3.12 -m venv venv
-   
-   # Activate virtual environment
+   python3 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   # You should see (venv) in your terminal prompt
    ```
 
-3. **Upgrade pip and install dependencies**
+3. **Install dependencies**
    ```bash
-   python -m pip install --upgrade pip setuptools wheel
    pip install -r requirements.txt
+   # Or if pip is not available, use: pip3 install -r requirements.txt
    ```
 
 4. **Set environment variables**
-
-   **Option A: Using OpenAI**
    ```bash
-   export AI_PROVIDER=openai
-   export OPENAI_API_KEY=sk-your_openai_api_key_here
-   export OPENAI_MODEL=gpt-3.5-turbo  # Optional
+   # Get your OpenRouter API key from https://openrouter.ai/keys
+   export OPENROUTER_API_KEY=your_openrouter_api_key_here
+   export OPENROUTER_MODEL=openai/gpt-3.5-turbo  # Optional
    ```
-   
-   **Option B: Using Hugging Face**
-   ```bash
-   export AI_PROVIDER=huggingface
-   export HF_API_KEY=hf_your-huggingface-token-here
-   export HF_MODEL=google/flan-t5-large  # Optional
-   export HF_TIMEOUT=120  # Optional
-   ```
-   
-   **Get API Keys:**
-   - OpenAI: https://platform.openai.com/account/api-keys (keys start with `sk-`)
-   - Hugging Face: https://huggingface.co/settings/tokens (keys start with `hf_`)
    
    **Important Notes:**
-   - OpenAI API keys always start with `sk-` or `sk-proj-`
-   - Do NOT use Google API keys (which start with `AIza`)
+   - OpenRouter gives one key to route across multiple model providers
+   - Model names use `provider/model` format (example: `google/gemini-flash-1.5`)
+   - Get your OpenRouter API key from: https://openrouter.ai/keys
    - See [API_KEY_SETUP.md](./API_KEY_SETUP.md) for detailed setup instructions
 
-5. **Run the backend server**
+5. **Run the server**
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
-   
-   You should see:
-   ```
-   INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-   INFO:     Started reloader process
-   INFO:     Started server process
-   INFO:     Waiting for application startup.
-   ```
-   
-   Backend API will be available at: http://localhost:8000
-   API Documentation: http://localhost:8000/docs
 
-### Step 3: Frontend Setup
-
-**Open a new terminal window** (keep the backend running in the first terminal)
+### Frontend Setup
 
 1. **Navigate to frontend directory**
    ```bash
@@ -210,80 +148,25 @@ sudo apt install python3.11 python3.11-venv
    ```bash
    npm run dev
    ```
-   
-   You should see:
-   ```
-   VITE v5.x.x  ready in xxx ms
-   
-   ➜  Local:   http://localhost:5173/
-   ➜  Network: use --host to expose
-   ```
-   
-   Frontend will be available at: http://localhost:5173 (or the port shown)
 
-5. **Build for production** (optional)
+5. **Build for production**
    ```bash
    npm run build
    npm run preview
    ```
 
-### Step 4: Verify Setup
-
-1. **Check backend is running:**
-   - Visit http://localhost:8000/health
-   - Should return: `{"status":"healthy","service":"content-ai"}`
-
-2. **Check API documentation:**
-   - Visit http://localhost:8000/docs
-   - You should see the interactive API documentation
-
-3. **Check frontend:**
-   - Visit http://localhost:5173 (or the port shown in terminal)
-   - You should see the Content AI interface
-
-4. **Test content generation:**
-   - Fill out a form (e.g., Blog Post)
-   - Click "Generate"
-   - Content should be generated successfully
-
-### Troubleshooting Local Setup
-
-**Python version issues:**
-- Ensure you're using Python 3.11 or 3.12
-- Check with: `python3 --version`
-- If using 3.13, create venv with: `python3.11 -m venv venv`
-
-**Dependencies won't install:**
-- Upgrade pip: `python -m pip install --upgrade pip setuptools wheel`
-- Use Python 3.11 or 3.12 (3.13 is not supported)
-
-**Backend won't start:**
-- Check environment variables are set: `echo $AI_PROVIDER`
-- Verify API key is correct
-- Check port 8000 is not in use
-
-**Frontend won't connect to backend:**
-- Verify backend is running on http://localhost:8000
-- Check `VITE_API_BASE_URL` in frontend `.env` file
-- Check browser console for CORS errors
-
 ## Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory (or use `.env.example` as a template):
 
 ```env
-# AI Provider Configuration (choose one: "openai" or "huggingface" or "hf")
-AI_PROVIDER=openai
+# OpenRouter configuration
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=openai/gpt-3.5-turbo
+APP_URL=http://localhost:3000
 
-# OpenAI API Configuration (when AI_PROVIDER=openai)
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-3.5-turbo
-AI_TIMEOUT=60
-
-# Hugging Face API Configuration (when AI_PROVIDER=huggingface or hf)
-HF_API_KEY=hf_your-huggingface-token
-HF_MODEL=google/flan-t5-large
-HF_TIMEOUT=120
+# AI Generation Settings
+AI_TIMEOUT=60  # Timeout in seconds for AI API calls
 
 # Rate Limiting
 RATE_LIMIT_MAX_REQUESTS=10
@@ -296,50 +179,25 @@ QUOTA_MAX_REQUESTS_PER_DAY=100
 # Frontend API URL (optional)
 VITE_API_BASE_URL=http://localhost:8000
 
-# CORS Configuration
-CORS_ORIGINS=*
+# CORS
+CORS_ORIGINS=http://localhost:3000
 ```
 
-### Using Hugging Face Inference API
+### OpenRouter Setup
 
-Content AI supports using Hugging Face Inference API as an alternative to OpenAI. This is useful when:
-- You want to use open-source models from Hugging Face
-- You want to avoid OpenAI API costs
-- You prefer cloud-based inference without managing your own infrastructure
-
-**Setup Steps:**
-
-1. **Get a Hugging Face API Token:**
-   - Sign up at [huggingface.co](https://huggingface.co)
-   - Go to Settings → Access Tokens
-   - Create a new token (read access is sufficient)
-   - Copy your token (starts with `hf_`)
-
-2. **Configure Environment Variables:**
-   ```env
-   AI_PROVIDER=huggingface
-   HF_API_KEY=hf_your-token-here
-   HF_MODEL=google/flan-t5-large
-   ```
-
-3. **Start the application** - It will automatically use Hugging Face instead of OpenAI
-
-**For Railway Deployment:**
-- Set `AI_PROVIDER=huggingface` as an environment variable
-- Set `HF_API_KEY` as a secret environment variable (your Hugging Face token)
-- Optionally set `HF_MODEL` to use a different model (default: `google/flan-t5-large`)
-- See [RAILWAY_ENV_VARIABLES.md](./RAILWAY_ENV_VARIABLES.md) for complete setup instructions
-
-**Available Models:**
-- `google/flan-t5-large` (default) - Good for general text generation
-- `google/flan-t5-xl` - Larger model, better quality
-- `mistralai/Mistral-7B-Instruct-v0.2` - High-quality instruction-following model
-- And many more at [huggingface.co/models](https://huggingface.co/models)
+1. Create an account and API key at [https://openrouter.ai/keys](https://openrouter.ai/keys)
+2. Set `OPENROUTER_API_KEY=your_key_here`
+3. Set `OPENROUTER_MODEL` to one supported model, for example:
+   - `openai/gpt-3.5-turbo`
+   - `google/gemini-flash-1.5`
+   - `anthropic/claude-3-haiku`
+   - `meta-llama/llama-3-8b-instruct`
+4. Optionally set `APP_URL` so OpenRouter usage analytics can attribute requests to your app
 
 ### Secret Management
 
 For production deployments, use a secret manager:
-- **AWS Secrets Manager**: Store `OPENAI_API_KEY` and retrieve at runtime
+- **AWS Secrets Manager**: Store `OPENROUTER_API_KEY` and retrieve at runtime
 - **GCP Secret Manager**: Similar approach for GCP deployments
 - **Docker Secrets**: Use Docker secrets for containerized deployments
 - **Kubernetes Secrets**: Use K8s secrets for orchestrated deployments
@@ -348,7 +206,7 @@ Example with AWS Secrets Manager (Python):
 ```python
 import boto3
 client = boto3.client('secretsmanager')
-secret = client.get_secret_value(SecretId='content-ai/openai-key')
+secret = client.get_secret_value(SecretId='ghostwriter/openrouter-key')
 api_key = secret['SecretString']
 ```
 
@@ -425,7 +283,7 @@ Check API health status.
 ```json
 {
   "status": "healthy",
-  "service": "content-ai"
+  "service": "ghostwriter"
 }
 ```
 
@@ -651,7 +509,7 @@ docker-compose up -d --build
 
 ### Backend won't start
 
-- Check that `OPENAI_API_KEY` is set
+- Check that `OPENROUTER_API_KEY` is set
 - Verify Python 3.11+ is installed (use `python3 --version`)
 - On macOS, use `python3` instead of `python`
 - Use `pip3` if `pip` is not available
@@ -671,7 +529,7 @@ docker-compose up -d --build
 
 ### AI generation fails
 
-- Verify `OPENAI_API_KEY` is valid
+- Verify `OPENROUTER_API_KEY` is valid
 - Check API quota/billing status
 - Review backend logs for detailed error messages
 
