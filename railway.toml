@@ -5,6 +5,10 @@
 builder = "NIXPACKS"
 
 [deploy]
+# Monorepo: root `railway-entry.sh` delegates to `backend/railway-entry.sh`.
+# If Railway "Root Directory" is `backend`, `bash railway-entry.sh` still works
+# (that file is deployed as /app/railway-entry.sh).
+startCommand = "bash railway-entry.sh"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
