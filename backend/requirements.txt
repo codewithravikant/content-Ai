@@ -4,6 +4,8 @@ pydantic>=2.7.0
 pydantic-settings>=2.1.0
 python-multipart==0.0.22
 openai==1.12.0
+# openai 1.12 passes `proxies=` to httpx; httpx 0.28 removed that kwarg (use httpx<0.28 until openai is upgraded).
+httpx>=0.27.0,<0.28.0
 tiktoken==0.7.0
 tenacity==8.2.3
 slowapi==0.1.9

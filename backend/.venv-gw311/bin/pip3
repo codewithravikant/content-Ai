@@ -1,4 +1,4 @@
-#!/Users/ravikantpandit/koodsisu/ghostwriter/backend/venv/bin/python3.13
+#!/Users/ravikantpandit/koodsisu/ghostwriter/backend/.venv-gw311/bin/python3.11
 import sys
 from pip._internal.cli.main import main
 if __name__ == '__main__':

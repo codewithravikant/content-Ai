@@ -1,5 +1,12 @@
+from pathlib import Path
+
 from dotenv import load_dotenv
-load_dotenv()
+
+# Load env before any module that reads OPENROUTER_API_KEY at import time (e.g. app.ai_client).
+_backend_dir = Path(__file__).resolve().parent.parent
+_repo_root = _backend_dir.parent
+load_dotenv(_repo_root / ".env")
+load_dotenv(_backend_dir / ".env", override=True)
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,10 +27,24 @@ from app.rate_limiter import get_rate_limiter
 from app.cache import get_cache
 from app.quota import check_quota
 from app.utils import get_client_ip
+from app.debug_ndjson import dbg as _agent_dbg
+from openai import APIStatusError
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+def _openrouter_error_message(exc: APIStatusError) -> str:
+    try:
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict) and err.get("message"):
+                return str(err["message"])
+    except Exception:
+        pass
+    return str(exc)[:500]
 
 # Initialize rate limiter and cache
 rate_limiter = get_rate_limiter()
@@ -33,6 +54,14 @@ cache = get_cache()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Ghostwriter API")
+    # region agent log
+    _agent_dbg(
+        "H3",
+        "main.lifespan",
+        "cors_origins_ready",
+        {"origin_count": len(allowed_origins), "has_env_cors": bool(os.getenv("CORS_ORIGINS"))},
+    )
+    # endregion
     yield
     # Shutdown
     logger.info("Shutting down Ghostwriter API")
@@ -46,12 +75,32 @@ app = FastAPI(
 )
 
 # CORS middleware
-# Get allowed origins from environment variable or default to wildcard
+# Browsers reject Access-Control-Allow-Origin: * together with credentialed requests.
+# Default dev origins are explicit so localhost:3000 (Vite) can call localhost:8000 reliably.
 import os
-allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+if os.getenv("CORS_ORIGINS"):
+    allowed_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    if allowed_origins == ["*"]:
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+else:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,  # In production, set CORS_ORIGINS env var
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +125,19 @@ async def logging_middleware(request: Request, call_next):
     logger.info(
         f"Response: {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
     )
+    # region agent log
+    _agent_dbg(
+        "H3",
+        "main.logging_middleware",
+        "request_completed",
+        {
+            "method": request.method,
+            "path": request.url.path,
+            "origin": request.headers.get("origin"),
+            "status_code": response.status_code,
+        },
+    )
+    # endregion
     
     return response
 
@@ -100,6 +162,17 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
     Generate content based on user input.
     Includes validation, normalization, prompt generation, AI call, and post-processing.
     """
+    # region agent log
+    _agent_dbg(
+        "H5",
+        "main.generate_content",
+        "handler_entry",
+        {
+            "content_type": getattr(req.content_type, "value", str(req.content_type)),
+            "origin": http_request.headers.get("origin"),
+        },
+    )
+    # endregion
     client_ip = get_client_ip(http_request)
     
     # Rate limiting
@@ -140,26 +213,49 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
     try:
         ai_response = await ai_client.generate_stream(normalized, prompt_data)
     except ValueError as e:
-        # Handle API key validation errors
-        logger.error(f"API key validation error: {e}")
+        logger.error("API key validation error: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+    except APIStatusError as e:
+        msg = _openrouter_error_message(e)
+        code = getattr(e, "status_code", None) or 502
+        logger.error("OpenRouter API error (%s): %s", code, msg, exc_info=True)
+        if code == 401:
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "Invalid OpenRouter API key. Set OPENROUTER_API_KEY in backend/.env. "
+                    "Get a key at https://openrouter.ai/keys"
+                ),
+            )
+        if code in (400, 404):
+            raise HTTPException(status_code=code, detail=msg)
+        if code == 429:
+            raise HTTPException(status_code=429, detail=msg or "Rate limited. Try again later.")
+        if 400 <= code < 500:
+            raise HTTPException(status_code=code, detail=msg)
+        raise HTTPException(status_code=503, detail=msg or "AI service error. Try again later.")
     except Exception as e:
         error_msg = str(e)
-        # Provide better error messages for common authentication issues
         if "invalid_api_key" in error_msg or "401" in error_msg or "Authentication" in str(type(e).__name__):
             raise HTTPException(
                 status_code=401,
                 detail=(
                     "Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY environment variable. "
                     "Get your API key from: https://openrouter.ai/keys"
-                )
+                ),
             )
-        raise
-    except Exception as e:
-        logger.error(f"AI generation error: {e}", exc_info=True)
+        if "OpenRouter client not initialized" in error_msg or "OPENROUTER_API_KEY" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "OpenRouter is not configured. Set OPENROUTER_API_KEY in backend/.env (or your environment) "
+                    "and restart the server."
+                ),
+            )
+        logger.error("AI generation error: %s", e, exc_info=True)
         raise HTTPException(
             status_code=503,
-            detail="AI service is temporarily unavailable. Please try again later."
+            detail="AI service is temporarily unavailable. Please try again later.",
         )
     
     generation_time = time.time() - start_time
@@ -177,6 +273,14 @@ async def generate_content(req: GenerateRequest, http_request: Request, backgrou
         # Return raw content if post-processing fails
         processed = {
             "content": ai_response["content"],
+            "metadata": ai_response.get("metadata", {}),
+        }
+
+    raw_text = (ai_response.get("content") or "").strip()
+    if raw_text and not (processed.get("content") or "").strip():
+        logger.warning("Post-processing removed all text; returning raw model output")
+        processed = {
+            "content": ai_response["content"].strip(),
             "metadata": ai_response.get("metadata", {}),
         }
     

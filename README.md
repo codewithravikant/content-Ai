@@ -2,6 +2,8 @@
 
 A powerful content generation platform that uses AI to create ready-to-use content for blogs, emails, stories, and social media posts. Built with React (Vite) frontend and FastAPI backend, featuring streaming responses, comprehensive validation, and multiple export formats.
 
+**Repository:** [https://gitea.kood.tech/ravikantpandit/ghostwriter](https://gitea.kood.tech/ravikantpandit/ghostwriter)
+
 ## Features
 
 - **Multiple Content Types**: Blog Posts, Email, Social Media Posts, LinkedIn Posts, and Job Applications with content-specific inputs
@@ -36,15 +38,15 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 ## Prerequisites
 
-- Docker and Docker Compose (recommended - avoids Python version issues!)
-- OR Node.js 18+ and Python 3.11 or 3.12 (Python 3.13 not fully supported yet)
-- OpenRouter API key
+- Docker and Docker Compose (recommended — avoids local Python/Node version issues)
+- OR Node.js 18+ and Python 3.11+ (3.11 is the most predictable for backend wheels; 3.13 works with current `requirements.txt`)
+- An OpenRouter API key ([openrouter.ai/keys](https://openrouter.ai/keys)) — **for shared keys, rotation, or access questions, contact the maintainer** (see [Support](#support))
 
 ## Quick Start (Docker)
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://gitea.kood.tech/ravikantpandit/ghostwriter.git
    cd ghostwriter
    ```
 
@@ -71,12 +73,13 @@ A powerful content generation platform that uses AI to create ready-to-use conte
    - API Docs: http://localhost:8000/docs
 
 ## Deploy on Railway
+#optional
 
 Ghostwriter is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
 
 **Quick Railway Deployment:**
 
-1. Push your code to GitHub
+1. Push your code to your Git remote (e.g. [Gitea](https://gitea.kood.tech/ravikantpandit/ghostwriter))
 2. Create a new Railway project
 3. Deploy backend service:
    - Root directory: `backend`
@@ -139,9 +142,10 @@ For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEP
    npm install
    ```
 
-3. **Create .env file** (optional, defaults to http://localhost:8000)
+3. **Create .env file** (optional — if you omit it, the dev app uses same-origin `/api`, which Vite proxies to `http://localhost:8000`)
    ```bash
-   echo "VITE_API_BASE_URL=http://localhost:8000" > .env
+   # Only if you need direct calls to the backend (not via /api proxy):
+   # echo "VITE_API_BASE_URL=http://localhost:8000" > .env
    ```
 
 4. **Run the development server**
@@ -176,8 +180,8 @@ RATE_LIMIT_WINDOW_SECONDS=60
 QUOTA_MAX_TOKENS_PER_DAY=50000
 QUOTA_MAX_REQUESTS_PER_DAY=100
 
-# Frontend API URL (optional)
-VITE_API_BASE_URL=http://localhost:8000
+# Frontend API URL (optional; default in app is /api — Vite/nginx proxy to backend)
+# VITE_API_BASE_URL=http://localhost:8000
 
 # CORS
 CORS_ORIGINS=http://localhost:3000
@@ -192,6 +196,7 @@ CORS_ORIGINS=http://localhost:3000
    - `google/gemini-flash-1.5`
    - `anthropic/claude-3-haiku`
    - `meta-llama/llama-3-8b-instruct`
+   - `qwen/qwen3.6-plus:free` (example free tier; IDs are always `provider/model`, not `openai/qwen/...`)
 4. Optionally set `APP_URL` so OpenRouter usage analytics can attribute requests to your app
 
 ### Secret Management
@@ -209,6 +214,39 @@ client = boto3.client('secretsmanager')
 secret = client.get_secret_value(SecretId='ghostwriter/openrouter-key')
 api_key = secret['SecretString']
 ```
+
+### Encryption and decryption (examples)
+
+Use these patterns to keep secrets off disk in plaintext when sharing backups or committing *encrypted* blobs only (never commit keys or passwords).
+
+**1) OpenSSL (file at rest)**
+
+Encrypt a local env file (you will be prompted for a password; use a strong secret and store it in a password manager, not in git):
+
+```bash
+openssl enc -aes-256-cbc -salt -pbkdf2 -in backend/.env -out backend/.env.enc
+# Decrypt when you need to run locally:
+openssl enc -aes-256-cbc -d -pbkdf2 -in backend/.env.enc -out backend/.env
+```
+
+**2) Python `cryptography` (Fernet — string secrets)**
+
+Install once: `pip install cryptography`.
+
+```python
+from cryptography.fernet import Fernet
+
+key = Fernet.generate_key()  # store key securely, e.g. env var or vault
+f = Fernet(key)
+ciphertext = f.encrypt(b"sk-your-openrouter-key-here")
+plaintext = f.decrypt(ciphertext).decode()
+```
+
+**3) Operational notes**
+
+- Prefer platform secrets (Railway, Docker secrets, cloud KMS) over ad-hoc file encryption for production.
+- **API keys:** provisioning, rotation, or team access — **contact the maintainer** (see [Support](#support)).
+- Do not commit `backend/.env`, decrypted payloads, or Fernet keys.
 
 ## API Endpoints
 
@@ -251,6 +289,104 @@ Generate content based on user input.
   }
 }
 ```
+
+#### Example payloads (every `content_type`)
+
+Use the same endpoint: `POST /generate` with `Content-Type: application/json`. Optional `generation_params` controls temperature and length.
+
+**`blog_post`**
+```json
+{
+  "content_type": "blog_post",
+  "context": {
+    "topic": "Benefits of morning walks",
+    "audience": "General health readers",
+    "tone": "friendly"
+  },
+  "specifications": {
+    "word_target": 200,
+    "seo_enabled": false,
+    "expertise": "beginner"
+  },
+  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+}
+```
+
+**`email`**
+```json
+{
+  "content_type": "email",
+  "context": {
+    "purpose": "Follow up after product demo",
+    "recipient_context": "Prospect at a mid-size SaaS company",
+    "key_points": "Thank them; summarize next steps; propose a call next week",
+    "tone": "professional"
+  },
+  "specifications": {
+    "urgency_level": "medium",
+    "cta": "Reply with a time that works"
+  },
+  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+}
+```
+
+**`social_media`**
+```json
+{
+  "content_type": "social_media",
+  "context": {
+    "platform": "x",
+    "topic": "Why readable code matters",
+    "tone": "casual",
+    "goal": "engagement"
+  },
+  "specifications": { "hashtag_count": 3, "word_target": 120 },
+  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+}
+```
+
+**`linkedin`**
+```json
+{
+  "content_type": "linkedin",
+  "context": {
+    "topic": "Lessons from shipping an MVP",
+    "target_audience": "Engineering leaders and founders",
+    "engagement_goal": "comments and shares",
+    "tone": "professional"
+  },
+  "specifications": { "word_target": 200, "include_hashtags": true },
+  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+}
+```
+
+**`job_application`**
+```json
+{
+  "content_type": "job_application",
+  "context": {
+    "position_title": "Senior Backend Engineer",
+    "company_name": "Example Corp",
+    "key_qualifications": "Python, FastAPI, Postgres, distributed systems, and team leadership experience",
+    "experience_level": "senior"
+  },
+  "specifications": {
+    "application_type": "cover_letter",
+    "word_target": 300
+  },
+  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+}
+```
+
+**curl (local backend)**
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8000/generate' \
+  -H 'Content-Type: application/json' \
+  -d @payload.json
+```
+
+With the Vite dev proxy (frontend on port 3000): `POST http://localhost:3000/api/generate` with the same JSON body.
 
 ### Stream Generation (GET /generate/stream)
 
@@ -303,11 +439,14 @@ Get API metrics.
 
 ### Blog Post
 
-**Required Fields:**
+**API / JSON (`context` + `specifications`):**
 - `topic`: Blog post topic (3-200 characters)
-- `target_audience`: Target audience (3-100 characters)
-- `word_count`: Word count range (e.g., "100-300") - **Minimum: 50 words**
+- `audience`: Target audience (3-100 characters) — the UI label is “Target audience”; the API field is `audience`
 - `tone`: Tone (professional, casual, friendly, formal, engaging, persuasive)
+- `word_target`: Target length as a **number** (min 50) — the form may collect a range string and normalize it before calling the API
+
+**Required Fields (UI form):**
+- Same as above, plus word count as a range string (e.g. `"100-300"`) which is normalized to `word_target`
 
 **Optional Fields:**
 - `seo_focus`: Enable SEO optimization (boolean)
@@ -340,7 +479,7 @@ Get API metrics.
 ### Social Media Post
 
 **Required Fields:**
-- `platform`: Platform name (Twitter/X, Instagram, LinkedIn, Facebook) (2-50 characters)
+- `platform`: Platform id or name (1-50 characters), e.g. `x`, `instagram`, `linkedin`
 - `topic`: Post topic (3-500 characters)
 - `tone`: Tone (professional, casual, friendly, formal, engaging, persuasive)
 
@@ -422,9 +561,9 @@ Generated content undergoes comprehensive post-processing:
 
 1. **Structure Parsing**: Extracts titles, headers, and sections
 2. **Word Count Validation**: Validates word count is within ±10% tolerance
-3. **AI Artifact Removal**: Removes phrases like "As an AI assistant"
+3. **AI Artifact Removal**: Removes common boilerplate phrases (e.g. “As an AI assistant”)
 4. **Formatting Standardization**: Fixes spacing, headers, and markdown issues
-5. **Section Validation**: Ensures required sections are present
+5. **Section Validation**: Checks structure hints (e.g. blog sections); does not discard valid model output for missing punctuation
 
 ## Testing
 
@@ -535,11 +674,11 @@ docker-compose up -d --build
 
 ## Contributing
 
-1. Fork the repository
+1. Fork or clone [the repository](https://gitea.kood.tech/ravikantpandit/ghostwriter)
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+5. Open a pull request on Gitea
 
 ## License
 
@@ -547,4 +686,6 @@ See [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For issues, questions, or contributions, please open an issue on GitHub.
+- **Repository:** [https://gitea.kood.tech/ravikantpandit/ghostwriter](https://gitea.kood.tech/ravikantpandit/ghostwriter)
+- **Issues & contributions:** use the Gitea project issue tracker on the repository above.
+- **API keys (OpenRouter):** for provisioning, rotation, team access, or configuration questions — **contact the maintainer** (same channel you use for this repo).

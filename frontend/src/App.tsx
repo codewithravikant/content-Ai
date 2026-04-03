@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   PenTool, 
   Mail, 
@@ -19,18 +19,30 @@ import { SocialMediaForm } from './components/forms/SocialMediaForm';
 import { LinkedInForm } from './components/forms/LinkedInForm';
 import { JobApplicationForm } from './components/forms/JobApplicationForm';
 import { exportToPlainText, exportToMarkdown, exportToHTML, exportToPDF } from './utils/exporters';
+import { fetchBackendHealth } from './services/api';
 import ReactMarkdown from 'react-markdown';
 
 const App = () => {
   // --- State ---
-  const [contentType, setContentType] = useState<ContentType>('blog_post'); 
+  const [contentType, setContentType] = useState<ContentType>('blog_post');
+  const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [content, setContent] = useState('');
   const [draftStatus, setDraftStatus] = useState('System Ready');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
-  const [showExportMenu, setShowExportMenu] = useState(false); 
-  
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchBackendHealth().then((ok) => {
+      if (!cancelled) setBackendReachable(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // --- Content Generation ---
   const handleContentGenerated = (generatedContent: string) => {
     setContent(generatedContent);
@@ -221,6 +233,15 @@ const App = () => {
       <main className="flex-1 flex flex-col min-w-0 bg-[#020617] relative">
         {/* Pattern Overlay */}
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
+
+        {backendReachable === false && (
+          <div
+            className="relative z-30 shrink-0 border-b border-amber-500/40 bg-amber-950/80 px-6 py-2.5 text-center text-[11px] font-semibold leading-snug text-amber-100/95"
+            role="status"
+          >
+            API unreachable (same-origin /api proxy). Start the backend on port 8000, then reload. From the backend folder: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+          </div>
+        )}
 
         {/* HUD Header */}
         <header className="h-20 border-b border-white/5 flex items-center justify-between px-10 bg-black/40 backdrop-blur-md z-10 sticky top-0">

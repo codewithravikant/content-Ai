@@ -93,10 +93,10 @@ def remove_ai_artifacts(content: str) -> str:
     
     for pattern in artifacts:
         content = re.sub(pattern, "", content, flags=re.IGNORECASE)
-    
-    # Remove incomplete sentences at the end
-    content = re.sub(r"[^.!?\n]+$", "", content)
-    
+
+    # Never strip trailing text for missing `.!?` — models often end with markdown or unpunctuated
+    # lines; the old `[^.!?\n]+$` sub deleted the whole body in that case (OpenRouter still billed).
+
     # Clean up extra whitespace
     content = re.sub(r"\n{3,}", "\n\n", content)
     content = re.sub(r" {2,}", " ", content)

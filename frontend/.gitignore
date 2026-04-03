@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Environment (never commit — use `.env.example` only as a template)
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Cursor local state (if present under frontend/)
+.cursor/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,14 +1,31 @@
 import os
 import logging
 import asyncio
-from typing import Dict, Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Dict
 
-from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from openai import AsyncOpenAI, APIStatusError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def _normalize_openrouter_model_id(raw: str) -> str:
+    """Fix common .env mistakes. OpenRouter IDs look like `qwen/...` or `openai/gpt-3.5-turbo`, not `openai/qwen/...`."""
+    m = (raw or "").strip()
+    if m.startswith("openai/qwen/"):
+        return m[len("openai/") :]
+    return m
+
+
+def _usage_total_tokens(usage: Any) -> int | None:
+    """OpenRouter sometimes returns `usage` as a dict (not a Pydantic object with attributes)."""
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        return usage.get("total_tokens")
+    return getattr(usage, "total_tokens", None)
 
 
 def _build_openrouter_client() -> AsyncOpenAI | None:
@@ -31,13 +48,43 @@ def _build_openrouter_client() -> AsyncOpenAI | None:
 
 client = _build_openrouter_client()
 
+# region agent log
+try:
+    from app.debug_ndjson import dbg as _agent_dbg
+
+    _agent_dbg(
+        "H4",
+        "ai_client.module_init",
+        "openrouter_client_state",
+        {"has_client": client is not None, "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")},
+    )
+except Exception:
+    pass
+# endregion
+
+
+def _should_retry_generation(exc: BaseException) -> bool:
+    """Retry on 5xx, timeouts, rate limits; do not retry most 4xx (e.g. 402 billing)."""
+    if isinstance(exc, APIStatusError):
+        code = getattr(exc, "status_code", None)
+        if code is None:
+            return True
+        if code >= 500:
+            return True
+        if code in (408, 429):
+            return True
+        return False
+    return True
+
 
 class AIClient:
     """OpenRouter client with retry logic and streaming support."""
 
     def __init__(self):
         self.provider = "openrouter"
-        self.model = os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")
+        self.model = _normalize_openrouter_model_id(
+            os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")
+        )
         self.timeout = int(os.getenv("AI_TIMEOUT", "60"))
         logger.info("Initialized AIClient with provider: %s, model: %s", self.provider, self.model)
 
@@ -81,15 +128,22 @@ class AIClient:
 
         full_content = ""
         final_chunk = None
+        tokens_used: int | None = None
         async for chunk in stream:
             final_chunk = chunk
-            delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+            u = getattr(chunk, "usage", None)
+            if u is not None:
+                t = _usage_total_tokens(u)
+                if t is not None:
+                    tokens_used = t
+            if not chunk.choices:
+                continue
+            delta_obj = chunk.choices[0].delta
+            if delta_obj is None:
+                continue
+            delta = getattr(delta_obj, "content", None)
             if delta:
                 full_content += delta
-
-        tokens_used = None
-        if final_chunk and getattr(final_chunk, "usage", None):
-            tokens_used = final_chunk.usage.total_tokens
 
         logger.info("Generation completed. Content length: %s, Tokens: %s", len(full_content), tokens_used)
         return {
@@ -104,7 +158,7 @@ class AIClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((Exception,)),
+        retry=retry_if_exception(_should_retry_generation),
         reraise=True,
     )
     async def generate_stream(self, request: Any, prompt_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -138,7 +192,12 @@ class AIClient:
         )
 
         async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+            if not chunk.choices:
+                continue
+            delta_obj = chunk.choices[0].delta
+            if delta_obj is None:
+                continue
+            delta = getattr(delta_obj, "content", None)
             if delta:
                 yield delta
                 await asyncio.sleep(0)
