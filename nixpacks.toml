@@ -1,11 +1,15 @@
 # Nixpacks configuration for Railway auto-detection
 # Railway will detect this file and use it for build configuration
+#
+# Nix's python311 does not include pip on PATH or as a module; bootstrap it
+# before installing requirements (same pattern as python.org minimal builds).
 
 [phases.setup]
 nixPkgs = ["python311", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
+    "cd backend && python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')\" && python3 get-pip.py && rm -f get-pip.py",
     "cd backend && python3 -m pip install -r requirements.txt",
     "cd frontend && npm ci"
 ]
