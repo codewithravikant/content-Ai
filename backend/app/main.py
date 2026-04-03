@@ -10,7 +10,8 @@ load_dotenv(_backend_dir / ".env", override=True)
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import logging
 import time
@@ -29,6 +30,20 @@ from app.quota import check_quota
 from app.utils import get_client_ip
 from app.debug_ndjson import dbg as _agent_dbg
 from openai import APIStatusError
+from fastapi.staticfiles import StaticFiles
+
+
+class StripApiPrefixMiddleware(BaseHTTPMiddleware):
+    """Rewrite /api/* to /* so production SPA (baseURL /api) hits existing routes."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.scope.get("path", "")
+        if path == "/api" or path.startswith("/api/"):
+            stripped = path[4:] or "/"
+            request.scope["path"] = stripped
+            request.scope["raw_path"] = stripped.encode("utf-8")
+        return await call_next(request)
+
 
 # Setup logging
 setup_logging()
@@ -414,6 +429,41 @@ async def log_token_usage(client_ip: str, tokens: int, content_type: str, model:
     log_token(client_ip, tokens, content_type, model)
 
 
+# Monorepo Railway Nixpacks builds frontend/dist; serve SPA + /assets from same origin as API.
+_frontend_dist = _repo_root / "frontend" / "dist"
+if _frontend_dist.is_dir() and (_frontend_dist / "index.html").is_file():
+    _assets_dir = _frontend_dist / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="vite_assets")
+
+    @app.get("/")
+    async def root_spa():
+        return FileResponse(_frontend_dist / "index.html")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        safe_root = _frontend_dist.resolve()
+        candidate = (safe_root / full_path).resolve()
+        try:
+            candidate.relative_to(safe_root)
+        except ValueError:
+            return FileResponse(_frontend_dist / "index.html")
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_frontend_dist / "index.html")
+else:
+
+    @app.get("/")
+    async def root():
+        return {
+            "service": "ghostwriter",
+            "message": "Content AI API. Open /docs for the interactive API.",
+            "docs": "/docs",
+            "health": "/health",
+            "openapi": "/openapi.json",
+        }
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for unhandled errors."""
@@ -422,6 +472,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "An internal error occurred. Please try again later."}
     )
+
+
+# Outermost middleware: strip /api before routing so /api/health → /health (see StripApiPrefixMiddleware).
+app.add_middleware(StripApiPrefixMiddleware)
 
 
 if __name__ == "__main__":
