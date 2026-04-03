@@ -1,14 +1,14 @@
-# Nixpacks configuration for Backend service on Railway
+# Nixpacks for a Railway service whose root directory is `backend/`.
 #
-# Nix python311 has no pip module; bootstrap before pip install.
+# Nix python311 is PEP 668 externally managed; use a venv for dependencies.
+
 [phases.setup]
 nixPkgs = ["python311"]
 
 [phases.install]
 cmds = [
-    "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')\" && python3 get-pip.py && rm -f get-pip.py",
-    "python3 -m pip install -r requirements.txt",
+    "python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements.txt",
 ]
 
 [start]
-cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT"
