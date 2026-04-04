@@ -8,7 +8,8 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.11-slim
+# Pin bookworm: `python:3.11-slim` may track newer Debian (e.g. trixie) where gdk-pixbuf dev package names differ.
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 

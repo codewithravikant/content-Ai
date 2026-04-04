@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Pin bookworm so libcairo/pango/gdk-pixbuf -dev packages match stable Debian.
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
