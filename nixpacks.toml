@@ -17,5 +17,7 @@ cmds = [
     "cd frontend && npm run build"
 ]
 
+# Must use `sh -c` so `cd` runs inside a shell (Railway runs start commands in exec form; `cd` is not a binary).
+# Nixpacks runs from repo root; Python package lives under backend/.
 [start]
-cmd = "bash railway-entry.sh"
+cmd = "sh -c \"cd backend && exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*\""
