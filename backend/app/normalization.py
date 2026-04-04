@@ -1,22 +1,23 @@
+from typing import Any, Dict
+
 from app.schemas import (
-    GenerateRequest,
-    ContentType,
     BlogPostContext,
-    EmailContext,
-    SocialMediaContext,
-    LinkedInContext,
-    JobApplicationContext,
     BlogPostSpecifications,
+    ContentType,
+    EmailContext,
     EmailSpecifications,
-    SocialMediaSpecifications,
-    LinkedInSpecifications,
-    JobApplicationSpecifications,
-    GenerationParams,
-    Tone,
     ExpertiseLevel,
+    GenerateRequest,
+    GenerationParams,
+    JobApplicationContext,
+    JobApplicationSpecifications,
+    LinkedInContext,
+    LinkedInSpecifications,
+    SocialMediaContext,
+    SocialMediaSpecifications,
+    Tone,
     UrgencyLevel,
 )
-from typing import Dict, Any
 
 
 def validate_request(request: GenerateRequest) -> GenerateRequest:
@@ -32,7 +33,7 @@ def validate_request(request: GenerateRequest) -> GenerateRequest:
     ]
     if request.content_type not in valid_types:
         raise ValueError(f"Unsupported content type: {request.content_type}")
-    
+
     # Validate context structure based on content type
     if request.content_type == ContentType.BLOG_POST:
         try:
@@ -59,7 +60,7 @@ def validate_request(request: GenerateRequest) -> GenerateRequest:
             JobApplicationContext(**request.context)
         except Exception as e:
             raise ValueError(f"Invalid job application context: {e}")
-    
+
     # Validate specifications structure
     if request.content_type == ContentType.BLOG_POST:
         try:
@@ -86,7 +87,7 @@ def validate_request(request: GenerateRequest) -> GenerateRequest:
             JobApplicationSpecifications(**request.specifications)
         except Exception as e:
             raise ValueError(f"Invalid job application specifications: {e}")
-    
+
     return request
 
 
@@ -107,24 +108,33 @@ def normalize_request(request: GenerateRequest) -> GenerateRequest:
                 normalized_context[key] = normalize_tone(value)
         else:
             normalized_context[key] = value
-    
+
     # Normalize specifications
     normalized_specs = {}
     for key, value in request.specifications.items():
-        if key == "word_target" and isinstance(value, str):
-            # Handle word count ranges like "800-1000"
-            normalized_specs[key] = normalize_word_count(value)
+        if key == "word_target":
+            if request.content_type == ContentType.BLOG_POST:
+                if isinstance(value, str):
+                    normalized_specs[key] = blog_word_target_from_range(value)
+                elif isinstance(value, int):
+                    normalized_specs[key] = max(10, min(500, value))
+                else:
+                    normalized_specs[key] = value
+            elif isinstance(value, str):
+                normalized_specs[key] = normalize_word_count(value)
+            else:
+                normalized_specs[key] = value
         elif isinstance(value, str):
             normalized_specs[key] = value.strip().lower()
         else:
             normalized_specs[key] = value
-    
+
     # Set default generation parameters if not provided
     if not request.generation_params:
         normalized_params = get_default_generation_params(request.content_type)
     else:
         normalized_params = request.generation_params
-    
+
     return GenerateRequest(
         content_type=request.content_type,
         context=normalized_context,
@@ -133,14 +143,33 @@ def normalize_request(request: GenerateRequest) -> GenerateRequest:
     )
 
 
+def blog_word_target_from_range(word_count: str) -> int:
+    """
+    Blog posts: range "min-max" → median, clamped to [10, 500].
+    Example: "800-1000" → 900 → clamped to 500.
+    """
+    if isinstance(word_count, int):
+        return max(10, min(500, word_count))
+    parts = str(word_count).split("-")
+    if len(parts) == 2:
+        try:
+            min_val = int(parts[0].strip())
+            max_val = int(parts[1].strip())
+            if min_val > 0 and max_val > 0 and min_val <= max_val:
+                mid = (min_val + max_val) // 2
+                return max(10, min(500, mid))
+        except ValueError:
+            pass
+    return 255  # midpoint of 10–500 when unparsable
+
+
 def normalize_word_count(word_count: str) -> int:
     """
-    Convert word count range (e.g., "800-1000") to target integer (median).
-    Minimum is 50 words.
+    Non–blog-post types: convert range to median (min 50 for social/linkedin/job defaults).
     """
     if isinstance(word_count, int):
         return max(50, word_count)
-    
+
     parts = word_count.split("-")
     if len(parts) == 2:
         try:
@@ -148,11 +177,10 @@ def normalize_word_count(word_count: str) -> int:
             max_val = int(parts[1].strip())
             if min_val > 0 and max_val > 0 and min_val <= max_val:
                 result = (min_val + max_val) // 2
-                return max(50, result)  # Ensure minimum 50
+                return max(50, result)
         except ValueError:
             pass
-    
-    # Default fallback (minimum 50)
+
     return max(50, 900)
 
 
@@ -175,8 +203,8 @@ def get_default_generation_params(content_type: ContentType) -> GenerationParams
     """
     if content_type == ContentType.BLOG_POST:
         return GenerationParams(
-            temperature=0.7,  # Balanced creativity
-            max_tokens=2000,
+            temperature=0.7,
+            max_tokens=1200,
             top_p=0.9,
         )
     elif content_type == ContentType.EMAIL:

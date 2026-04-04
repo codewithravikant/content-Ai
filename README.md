@@ -4,6 +4,10 @@ A powerful content generation platform that uses AI to create ready-to-use conte
 
 **Repository:** [https://gitea.kood.tech/ravikantpandit/ghostwriter](https://gitea.kood.tech/ravikantpandit/ghostwriter)
 
+## testing deployment 
+https://web-aiforme.up.railway.app/
+
+
 ## Features
 
 - **Multiple Content Types**: Blog Posts, Email, Social Media Posts, LinkedIn Posts, and Job Applications with content-specific inputs
@@ -73,7 +77,7 @@ A powerful content generation platform that uses AI to create ready-to-use conte
    - API Docs: http://localhost:8000/docs
 
 ## Deploy on Railway
-#optional
+##optional
 
 Ghostwriter is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
 
@@ -81,17 +85,57 @@ Ghostwriter is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY
 
 1. Push your code to your Git remote (e.g. [Gitea](https://gitea.kood.tech/ravikantpandit/ghostwriter))
 2. Create a new Railway project
-3. Deploy backend service:
-   - Root directory: `backend`
-   - Set `OPENROUTER_API_KEY` environment variable
+3. Deploy backend service (pick one):
+   - **Monorepo root:** use the repo root as the service root; `railway.toml` builds with the root **`Dockerfile`** (Python image includes `pip` — avoids Nix “No module named pip”).
+   - **Backend only:** set service root to **`backend`** and use **`backend/Dockerfile`**.
+   - Set `OPENROUTER_API_KEY` (and optional `OPENROUTER_MODEL`, `CORS_ORIGINS`).
 4. Deploy frontend service:
    - Root directory: `frontend`
    - Set `VITE_API_BASE_URL` to your backend Railway URL
 5. Update backend `CORS_ORIGINS` with frontend URL
 
-For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
+For details, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
 ## Manual Setup
+
+Use the steps below **from the repository root** unless a step says otherwise.
+
+### Plug-and-play: configure OpenRouter from the terminal
+
+**Typical local flow (first time on a machine or clone):**
+
+1. **Save the API key** (once per machine / clone)  
+   ```bash
+   make configure
+   ```  
+   This interactively writes `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` into **`backend/.env`** (creates it from `backend/.env.example` if needed, `chmod 600`).
+
+2. **Install dependencies** (once, or after `make clean`)  
+   ```bash
+   make setup
+   ```
+
+3. **Run the backend and frontend together**  
+   ```bash
+   make dev
+   ```  
+   - Backend: http://localhost:8000  
+   - Frontend: http://localhost:3000  
+   - API docs: http://localhost:8000/docs  
+
+**One-liner** (after you are comfortable with the prompts in step 1):
+
+```bash
+make configure && make setup && make dev
+```
+
+After the first successful `make setup`, you usually only need `make dev` unless you change the key, run `make clean`, or switch machines.
+
+**Optional variants**
+
+- **Repo root `.env` as well** (same OpenRouter variables only): `make configure-root` — or run `make configure` first, then `make configure-root` if you need both files aligned.
+- **Alias:** `make init-env` is the same as `make configure`.
+- **CI / automation:** `make configure` needs an interactive TTY. In pipelines, set secrets in your platform and use non-interactive `.env` files or environment variables instead.
 
 ### Backend Setup
 
@@ -113,8 +157,18 @@ For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEP
    ```
 
 4. **Set environment variables**
+
+   **Option A — recommended:** from the repo root, run `make configure` (see [Plug-and-play](#plug-and-play-configure-openrouter-from-the-terminal) above).
+
+   **Option B — manual:** copy the example and edit, or export for the current shell only:
+
    ```bash
-   # Get your OpenRouter API key from https://openrouter.ai/keys
+   cp .env.example .env   # inside backend/
+   # Edit .env: set OPENROUTER_API_KEY (and optionally OPENROUTER_MODEL)
+   ```
+
+   ```bash
+   # Or one-off exports (not persisted):
    export OPENROUTER_API_KEY=your_openrouter_api_key_here
    export OPENROUTER_MODEL=openai/gpt-3.5-turbo  # Optional
    ```
@@ -161,7 +215,9 @@ For complete Railway deployment guide, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEP
 
 ## Environment Variables
 
-Create a `.env` file in the root directory (or use `.env.example` as a template):
+The backend loads environment variables from **two** files, in order: the repository root `.env`, then **`backend/.env`** (which overrides the root file). You can put `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` in either place; using `backend/.env` keeps backend secrets next to the FastAPI app.
+
+Create a `.env` file in the project root and/or `backend/.env` (templates: `.env.example` at the root and [`backend/.env.example`](backend/.env.example)):
 
 ```env
 # OpenRouter configuration
@@ -185,12 +241,16 @@ QUOTA_MAX_REQUESTS_PER_DAY=100
 
 # CORS
 CORS_ORIGINS=http://localhost:3000
+
+# Logging (default is quiet: WARNING). Use LOG_LEVEL=INFO or DEBUG for request/token/AI logs.
+# GHOSTWRITER_DEBUG=1 sets DEBUG when LOG_LEVEL is unset (includes postprocess detail).
+# LOG_LEVEL=WARNING
 ```
 
 ### OpenRouter Setup
 
 1. Create an account and API key at [https://openrouter.ai/keys](https://openrouter.ai/keys)
-2. Set `OPENROUTER_API_KEY=your_key_here`
+2. Set `OPENROUTER_API_KEY=your_key_here` in your **root** `.env` and/or **`backend/.env`** (same variable name; `backend/.env` wins if both are set).
 3. Set `OPENROUTER_MODEL` to one supported model, for example:
    - `openai/gpt-3.5-turbo`
    - `google/gemini-flash-1.5`
@@ -264,13 +324,13 @@ Generate content based on user input.
     "tone": "engaging"
   },
   "specifications": {
-    "word_target": 900,
+    "word_target": 450,
     "seo_enabled": true,
     "expertise": "beginner"
   },
   "generation_params": {
     "temperature": 0.7,
-    "max_tokens": 2000,
+    "max_tokens": 1200,
     "top_p": 0.9
   }
 }
@@ -308,7 +368,7 @@ Use the same endpoint: `POST /generate` with `Content-Type: application/json`. O
     "seo_enabled": false,
     "expertise": "beginner"
   },
-  "generation_params": { "temperature": 0.7, "max_tokens": 2000, "top_p": 0.9 }
+  "generation_params": { "temperature": 0.7, "max_tokens": 1200, "top_p": 0.9 }
 }
 ```
 
@@ -443,7 +503,7 @@ Get API metrics.
 - `topic`: Blog post topic (3-200 characters)
 - `audience`: Target audience (3-100 characters) — the UI label is “Target audience”; the API field is `audience`
 - `tone`: Tone (professional, casual, friendly, formal, engaging, persuasive)
-- `word_target`: Target length as a **number** (min 50) — the form may collect a range string and normalize it before calling the API
+- `word_target`: Target length as a **number** (**blog: 10–500**; other types may differ) — the form collects a `"min-max"` range and normalizes to the median before calling the API
 
 **Required Fields (UI form):**
 - Same as above, plus word count as a range string (e.g. `"100-300"`) which is normalized to `word_target`
@@ -486,7 +546,7 @@ Get API metrics.
 **Optional Fields:**
 - `goal`: Post goal/purpose (max 200 characters)
 - `hashtag_count`: Number of hashtags to include (0-20, default: 3)
-- `word_count`: Word count range - **Minimum: 50 words** (default: "50-300")
+- `word_count`: Word count range — **blog: 10–500 words** (default: `"100-300"`)
 
 **Output Structure:**
 - Platform-optimized post content
@@ -534,7 +594,7 @@ Get API metrics.
 
 The platform validates and normalizes all inputs before prompt generation:
 
-- **Word Count**: Converts ranges like "50-300" to target integer (175) - **Minimum enforced: 50 words**
+- **Word Count**: Converts ranges like `"100-300"` to a target integer (median); **blog posts clamp to 10–500 words**
 - **Tone**: Normalizes to lowercase and validates against allowed values
 - **Default Parameters**: Sets appropriate temperature, max_tokens, and top_p based on content type
 - **Content Type Validation**: Ensures only supported content types are processed
@@ -600,8 +660,8 @@ docker-compose up --build
 
 The project includes a GitHub Actions CI/CD pipeline that:
 
-1. **Backend Tests**: Runs linting (black, isort, flake8) and pytest
-2. **Frontend Tests**: Runs ESLint and builds the frontend
+1. **Backend Tests**: Runs linting (black, isort, flake8), pip-audit, and pytest
+2. **Frontend Tests**: Runs npm audit, ESLint, and builds the frontend
 3. **Docker Build**: Builds both backend and frontend Docker images
 4. **Docker Compose Validation**: Validates docker-compose.yml configuration
 
@@ -623,11 +683,12 @@ docker-compose up -d --build
 1. **Environment Variables**: Use secret managers (AWS/GCP) instead of `.env` files
 2. **Rate Limiting**: Adjust `RATE_LIMIT_MAX_REQUESTS` based on expected traffic
 3. **Quota Management**: Set `QUOTA_MAX_TOKENS_PER_DAY` based on API budget
-4. **CORS**: Restrict `allow_origins` in FastAPI CORS middleware to your frontend domain
-5. **HTTPS**: Use reverse proxy (Nginx/Traefik) with SSL certificates
-6. **Monitoring**: Set up monitoring for logs, metrics, and error tracking
-7. **Caching**: Consider Redis for distributed caching in production
-8. **Database**: Add database for persistent quota tracking and analytics
+4. **CORS**: Set `GHOSTWRITER_ENV=production` and `CORS_ORIGINS` to a comma-separated list of real HTTPS origins (the API refuses to start in production if `CORS_ORIGINS` is missing or wildcard-only)
+5. **Client API Key (optional)**: Set `GHOSTWRITER_CLIENT_API_KEY` on the backend to require `Authorization: Bearer`, `X-API-Key`, or (for SSE only) `api_key` query. For the SPA, `VITE_CLIENT_API_KEY` sends the same value (it is **not secret** in the browser). For real protection, put the API behind an authenticated gateway, private network, or BFF instead of relying on a Vite env var
+6. **HTTPS**: Use reverse proxy (Nginx/Traefik) with SSL certificates (required if you pass client keys in query strings for SSE)
+7. **Monitoring**: Set up monitoring for logs, metrics, and error tracking; use the [OpenRouter dashboard](https://openrouter.ai) for usage, quota, and billing alerts
+8. **Caching**: Consider Redis for distributed caching in production
+9. **Database**: Add database for persistent quota tracking and analytics
 
 ## Performance
 
@@ -638,17 +699,29 @@ docker-compose up -d --build
 
 ## Security
 
-- **Prompt Injection Defense**: Inputs wrapped in delimiters, model instructed to ignore commands
-- **Input Validation**: Comprehensive validation prevents malicious inputs
-- **Rate Limiting**: Per-IP rate limiting prevents abuse
-- **Quota Management**: Daily token and request quotas prevent cost overruns
-- **Error Handling**: User-friendly error messages prevent information leakage
+- **Prompt Injection Defense**: Inputs wrapped in delimiters; post-processing strips common artifacts. Do not log full prompts in shared environments; at `LOG_LEVEL=DEBUG`, only prompt *lengths* are logged (see `log_prompt_sizes_debug` in the backend)
+- **Input Validation**: Comprehensive validation prevents malformed requests
+- **Rate Limiting**: Per-IP rate limiting reduces abuse
+- **Quota Management**: Daily token and request quotas limit OpenRouter cost per IP (in-memory; use a database for multi-instance deployments)
+- **Optional Client API Key**: When `GHOSTWRITER_CLIENT_API_KEY` is set, `/generate`, `/generate/stream`, `/export/pdf`, and `/metrics` require the key (`/health` stays unauthenticated for load balancers)
+- **Errors**: OpenRouter failures return generic messages to clients; full provider text is logged server-side only
+- **CORS**: With `GHOSTWRITER_ENV=production`, missing or unsafe `CORS_ORIGINS` fails startup. In development, unset `CORS_ORIGINS` defaults to explicit localhost origins (not `*`) so credentialed dev requests work
+- **Supply Chain**: CI runs `pip-audit` and `npm audit`; keep `requirements.txt` and `package-lock.json` updated
 
 ## Troubleshooting
 
+### Local development (`make dev`)
+
+- **`Missing backend/.env` when running `make dev` or `make dev-backend`:** run `make configure` from the repo root, or copy `backend/.env.example` to `backend/.env` and set `OPENROUTER_*` manually.
+- **`make configure` exits with “No TTY”:** run it in a normal terminal (not piped/background). In CI, do not rely on `make configure`; provide `.env` or env vars via your provider’s secrets.
+- **`npm run build` succeeded but nothing is on port 3000:** `build` only writes `frontend/dist/`. For local UI use `make dev` or `cd frontend && npm run dev`. To test a production bundle locally: `npm run build && npm run preview` (Vite preview still proxies `/api` to `:8000` per `vite.config.ts`).
+- **Ports in use:** backend defaults to **8000**, frontend to **3000**. Stop other processes on those ports or adjust the Makefile / Vite port if your project allows it.
+
 ### Backend won't start
 
-- Check that `OPENROUTER_API_KEY` is set
+- **`ModuleNotFoundError: No module named 'app'`**: Run uvicorn from the **`backend/`** directory so the `app` package is on the path, e.g. `cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`, or use `make dev-backend` / `./railway-entry.sh` from the repo root (both `cd` into `backend` first). Alternatively: `cd backend && python -m uvicorn app.main:app ...`
+- Check that `OPENROUTER_API_KEY` is set (e.g. in `backend/.env` after `make configure`, or exported in the shell)
+- If `GHOSTWRITER_ENV=production`, set `CORS_ORIGINS` to explicit origins (not empty, not `*`-only)
 - Verify Python 3.11+ is installed (use `python3 --version`)
 - On macOS, use `python3` instead of `python`
 - Use `pip3` if `pip` is not available
@@ -656,9 +729,10 @@ docker-compose up -d --build
 
 ### Frontend won't connect to backend
 
-- Verify backend is running on http://localhost:8000
-- Check `VITE_API_BASE_URL` in frontend `.env` file
-- Check CORS settings in backend
+- Verify the backend is running on http://localhost:8000 (`curl http://localhost:8000/health`).
+- **Default dev setup:** leave `VITE_API_BASE_URL` unset so the app calls same-origin `/api`; Vite proxies `/api` to `http://localhost:8000`. Only set `VITE_API_BASE_URL` if you intentionally call the API cross-origin (and ensure backend CORS allows your origin).
+- If you set **`GHOSTWRITER_CLIENT_API_KEY`** on the backend, set matching **`VITE_CLIENT_API_KEY`** in `frontend/.env` or generation requests can return **401**.
+- Check CORS settings in the backend if you use a custom frontend origin or direct API URL
 
 ### Docker build fails
 

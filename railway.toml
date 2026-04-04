@@ -1,15 +1,14 @@
 # Railway configuration for multi-service deployment
 # This file helps Railway understand the project structure
 
+# Use the repo-root Dockerfile so `pip` comes from the official Python image (avoids Nix “no module named pip”).
+# To use Nixpacks instead, set builder = "NIXPACKS" and ensure nixpacks.toml lists python311Packages.pip.
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-# Monorepo: root `railway-entry.sh` delegates to `backend/railway-entry.sh`.
-# If Railway "Root Directory" is `backend`, `bash railway-entry.sh` still works
-# (that file is deployed as /app/railway-entry.sh).
-startCommand = "bash railway-entry.sh"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 4
+restartPolicyMaxRetries = 10

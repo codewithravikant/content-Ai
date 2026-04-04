@@ -19,13 +19,24 @@ import { SocialMediaForm } from './components/forms/SocialMediaForm';
 import { LinkedInForm } from './components/forms/LinkedInForm';
 import { JobApplicationForm } from './components/forms/JobApplicationForm';
 import { exportToPlainText, exportToMarkdown, exportToHTML, exportToPDF } from './utils/exporters';
-import { fetchBackendHealth } from './services/api';
+import { LoginModal } from './components/LoginModal';
+import {
+  clearEmailSession,
+  EMAIL_SESSION_KEY,
+  fetchAuthEmailConfig,
+  fetchBackendHealth,
+  logoutEmailSession,
+  type AuthEmailConfig,
+} from './services/api';
 import ReactMarkdown from 'react-markdown';
 
 const App = () => {
   // --- State ---
   const [contentType, setContentType] = useState<ContentType>('blog_post');
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
+  const [authConfig, setAuthConfig] = useState<AuthEmailConfig | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [emailSessionActive, setEmailSessionActive] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [content, setContent] = useState('');
   const [draftStatus, setDraftStatus] = useState('System Ready');
@@ -42,6 +53,49 @@ const App = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuthEmailConfig().then((cfg) => {
+      if (cancelled) return;
+      setAuthConfig(cfg);
+      if (!cfg.require_email_login) return;
+      const token = localStorage.getItem(EMAIL_SESSION_KEY);
+      if (!token) {
+        setShowLoginModal(true);
+        return;
+      }
+      const direct = import.meta.env.VITE_API_BASE_URL?.trim();
+      const url = direct
+        ? `${direct.replace(/\/$/, '')}/auth/email/session`
+        : '/api/auth/email/session';
+      fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }).then(
+        (r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            setEmailSessionActive(true);
+            setShowLoginModal(false);
+          } else {
+            clearEmailSession();
+            setEmailSessionActive(false);
+            setShowLoginModal(true);
+          }
+        }
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Retry while the API is down so the banner clears after you start uvicorn (no full reload).
+  useEffect(() => {
+    if (backendReachable !== false) return;
+    const id = window.setInterval(() => {
+      fetchBackendHealth().then(setBackendReachable);
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [backendReachable]);
 
   // --- Content Generation ---
   const handleContentGenerated = (generatedContent: string) => {
@@ -121,7 +175,19 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-[#020617] text-slate-100 font-sans overflow-hidden">
-      
+      {authConfig?.require_email_login && showLoginModal && (
+        <LoginModal
+          emailDelivery={{
+            email_backend: authConfig.email_backend,
+            dev_inbox_url: authConfig.dev_inbox_url,
+          }}
+          onVerified={() => {
+            setShowLoginModal(false);
+            setEmailSessionActive(true);
+          }}
+        />
+      )}
+
       {/* Background Ambient Glows */}
       <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none" />
@@ -239,7 +305,13 @@ const App = () => {
             className="relative z-30 shrink-0 border-b border-amber-500/40 bg-amber-950/80 px-6 py-2.5 text-center text-[11px] font-semibold leading-snug text-amber-100/95"
             role="status"
           >
-            API unreachable (same-origin /api proxy). Start the backend on port 8000, then reload. From the backend folder: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+            API unreachable (Vite proxies <code className="text-amber-200/90">/api</code> to{' '}
+            <code className="text-amber-200/90">localhost:8000</code>). From the{' '}
+            <code className="text-amber-200/90">backend/</code> folder run:{' '}
+            <code className="text-amber-200/90">
+              uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+            </code>
+            . This page rechecks every few seconds once the API is up.
           </div>
         )}
 
@@ -282,6 +354,20 @@ const App = () => {
             </div>
             
             <div className="h-8 w-px bg-white/5 mx-2" />
+
+            {authConfig?.require_email_login && emailSessionActive && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await logoutEmailSession();
+                  setEmailSessionActive(false);
+                  setShowLoginModal(true);
+                }}
+                className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-rose-400 transition-colors"
+              >
+                Sign out
+              </button>
+            )}
 
             <button 
               onClick={copyToClipboard}

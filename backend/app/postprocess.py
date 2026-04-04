@@ -1,15 +1,14 @@
-import re
 import logging
-from typing import Dict, Any, List
+import re
+from typing import Any, Dict, List
+
 from app.schemas import GenerateRequest
 
 logger = logging.getLogger(__name__)
 
 
 def post_process_content(
-    content: str,
-    request: GenerateRequest,
-    metadata: Dict[str, Any]
+    content: str, request: GenerateRequest, metadata: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Post-process generated content:
@@ -21,47 +20,52 @@ def post_process_content(
     """
     # Remove AI artifacts
     content = remove_ai_artifacts(content)
-    
+
     # Parse structure
     parsed = parse_content_structure(content, request.content_type.value)
-    
+
     # Validate word count
     word_count = count_words(content)
-    target_word_count = request.specifications.get('word_target', 900)
+    target_word_count = request.specifications.get("word_target", 900)
     word_count_valid = validate_word_count(word_count, target_word_count)
-    
+
     if not word_count_valid:
-        logger.warning(
-            f"Word count validation failed: {word_count} (target: {target_word_count}, "
-            f"tolerance: ±10%)"
+        logger.debug(
+            "Word count validation failed: %s (target: %s, tolerance: ±10%%)",
+            word_count,
+            target_word_count,
         )
-    
+
     # Standardize formatting
     content = standardize_formatting(content)
-    
+
     # Validate required sections
     sections_complete = validate_sections(parsed, request.content_type.value)
-    
+
     if not sections_complete:
-        logger.warning(f"Missing required sections for {request.content_type.value}")
-    
+        logger.debug("Missing required sections for %s", request.content_type.value)
+
     # Extract metadata
     estimated_read_time = estimate_read_time(word_count)
-    seo_keywords = extract_seo_keywords(content) if request.specifications.get('seo_enabled', False) else None
-    
+    seo_keywords = (
+        extract_seo_keywords(content) if request.specifications.get("seo_enabled", False) else None
+    )
+
     # Extract hashtags for social media content
     hashtags = None
     content_type_val = request.content_type.value
-    if content_type_val in ['social_media', 'linkedin']:
+    if content_type_val in ["social_media", "linkedin"]:
         hashtags = extract_hashtags(content)
         if not hashtags or len(hashtags) == 0:
-            if content_type_val == 'social_media':
+            if content_type_val == "social_media":
                 # If no hashtags found but expected, generate from content
-                expected_count = request.specifications.get('hashtag_count', 3)
+                expected_count = request.specifications.get("hashtag_count", 3)
                 hashtags = extract_seo_keywords(content, max_keywords=expected_count)
-            elif content_type_val == 'linkedin' and request.specifications.get('include_hashtags', True):
+            elif content_type_val == "linkedin" and request.specifications.get(
+                "include_hashtags", True
+            ):
                 hashtags = extract_seo_keywords(content, max_keywords=5)
-    
+
     return {
         "content": content,
         "metadata": {
@@ -90,7 +94,7 @@ def remove_ai_artifacts(content: str) -> str:
         r"i'm sorry,? but i",
         r"as a (language model|ai)",
     ]
-    
+
     for pattern in artifacts:
         content = re.sub(pattern, "", content, flags=re.IGNORECASE)
 
@@ -100,29 +104,29 @@ def remove_ai_artifacts(content: str) -> str:
     # Clean up extra whitespace
     content = re.sub(r"\n{3,}", "\n\n", content)
     content = re.sub(r" {2,}", " ", content)
-    
+
     return content.strip()
 
 
 def parse_content_structure(content: str, content_type: str) -> Dict[str, List[str]]:
     """Parse content structure (titles, headers, sections)."""
     sections = []
-    
+
     # Extract H1 title
     h1_match = re.search(r"^# (.+)$", content, re.MULTILINE)
     title = h1_match.group(1) if h1_match else None
-    
+
     # Extract H2 sections
     h2_matches = re.finditer(r"^## (.+)$", content, re.MULTILINE)
     for match in h2_matches:
         sections.append(match.group(1))
-    
+
     # For emails, extract subject line
     if content_type == "email":
         subject_match = re.search(r"^Subject:\s*(.+)$", content, re.MULTILINE | re.IGNORECASE)
         if subject_match:
             sections.insert(0, f"Subject: {subject_match.group(1)}")
-    
+
     return {
         "title": title,
         "sections": sections,
@@ -179,17 +183,17 @@ def validate_sections(parsed: Dict[str, Any], content_type: str) -> bool:
             for s in sections
         )
         return has_title and has_sections and has_conclusion
-    
+
     elif content_type == "email":
         # Emails should have: subject, greeting, body, closing
         content_lower = parsed.get("sections", [])
         # Basic validation - subject should be present
         return len(content_lower) > 0
-    
+
     elif content_type in ["social_media", "linkedin", "job_application"]:
         # These content types have simpler structure - just need content
         return True
-    
+
     return True
 
 
@@ -204,12 +208,12 @@ def extract_seo_keywords(content: str, max_keywords: int = 5) -> List[str]:
     # Extract words from headers (H1, H2, H3)
     headers = re.findall(r"^#{1,3} (.+)$", content, re.MULTILINE)
     keywords = []
-    
+
     for header in headers:
         # Extract meaningful words (length > 3, not common stop words)
         words = re.findall(r"\b[a-z]{4,}\b", header.lower())
         keywords.extend(words)
-    
+
     # Remove duplicates and return top keywords
     unique_keywords = list(dict.fromkeys(keywords))
     return unique_keywords[:max_keywords]
@@ -218,12 +222,12 @@ def extract_seo_keywords(content: str, max_keywords: int = 5) -> List[str]:
 def extract_hashtags(content: str) -> List[str]:
     """Extract hashtags from social media content."""
     # Find all hashtags (format: #word or #word1_word2)
-    hashtags = re.findall(r'#(\w+)', content)
-    
+    hashtags = re.findall(r"#(\w+)", content)
+
     # Remove duplicates and clean up
     unique_hashtags = list(dict.fromkeys(hashtags))
-    
+
     # Filter out common/meaningless hashtags
     filtered = [h for h in unique_hashtags if len(h) > 2]
-    
+
     return filtered

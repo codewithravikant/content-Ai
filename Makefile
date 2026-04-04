@@ -8,6 +8,7 @@ FRONTEND_DIR := $(REPO_ROOT)/frontend
 BACKEND_VENV := $(BACKEND_DIR)/venv
 BACKEND_PORT := 8000
 FRONTEND_PORT := 3000
+MAILPIT_IMAGE := axllent/mailpit
 
 # Helpful when you want verbose output:
 #   make DEV_VERBOSE=1 dev
@@ -20,22 +21,40 @@ endif
 
 .PHONY: help
 help:
-	@echo "Ghostwriter - Makefile"
+	@echo "Ghostwriter — Makefile"
 	@echo ""
-	@echo "Common targets:"
-	@echo "  make setup         Install backend + frontend dependencies (idempotent)"
-	@echo "  make dev           Start backend + frontend locally (keeps running)"
-	@echo "  make health        Check backend health endpoint"
-	@echo "  make test          Run backend tests + frontend lint"
-	@echo "  make sanity        Quick sanity check: health + tests + lint"
-	@echo "  make security      Security audit: pip-audit (backend) + npm audit (frontend)"
-	@echo "  make encrypt-env   Encrypt local .env files to .env.enc (no git)"
-	@echo "  make decrypt-env   Decrypt local .env.enc files back to .env"
-	@echo "  make clean         Remove local install artifacts (venv/node_modules)"
+	@echo "Setup & run"
+	@echo "  make configure       Interactive: set OPENROUTER_* in backend/.env"
+	@echo "  make configure-root  Same + update repo root .env (OpenRouter vars only)"
+	@echo "  make init-env        Alias for configure"
+	@echo "  make setup           Install backend + frontend dependencies (idempotent)"
+	@echo "  make dev             Start backend + frontend (Ctrl+C stops both)"
+	@echo "  make health          Check backend http://localhost:$(BACKEND_PORT)/health"
+	@echo "  make test            Backend pytest + frontend lint"
+	@echo "  make sanity          health + tests + lint"
+	@echo "  make security        pip-audit (backend) + npm audit (frontend)"
+	@echo "  make encrypt-env     Encrypt local .env → .env.enc (needs ENV_PASSPHRASE)"
+	@echo "  make decrypt-env     Decrypt .env.enc → .env"
+	@echo "  make clean           Remove venv + node_modules"
 	@echo ""
-	@echo "Notes:"
-	@echo "  - Backend runs with env loaded from backend/.env"
-	@echo "  - Frontend uses its own frontend/.env (Vite will load it automatically)"
+	@echo "Email verification (login with GHOSTWRITER_REQUIRE_EMAIL_LOGIN=true)"
+	@echo "  make email-help      How to run Mailpit or Resend (read this first)"
+	@echo "  make mailpit         Start Mailpit: SMTP :1025, web UI :8025 (needs Docker)"
+	@echo ""
+	@echo "Notes"
+	@echo "  - Backend loads backend/.env; frontend loads frontend/.env (Vite)."
+	@echo "  - First run: make configure, or cp backend/.env.example backend/.env"
+
+.PHONY: configure
+configure: check-tools
+	@"$(REPO_ROOT)/scripts/configure-env.sh"
+
+.PHONY: init-env
+init-env: configure
+
+.PHONY: configure-root
+configure-root: check-tools
+	@"$(REPO_ROOT)/scripts/configure-env.sh" --root
 
 .PHONY: check-tools
 check-tools:
@@ -79,12 +98,14 @@ dev-backend:
 	@set -euo pipefail; \
 	if [[ ! -f "$(BACKEND_DIR)/.env" ]]; then \
 		echo "Missing $(BACKEND_DIR)/.env"; \
-		echo "Copy backend/.env.example to backend/.env and add required AI env vars."; \
+		echo "Run: make configure   (interactive prompt for OpenRouter key and model)"; \
+		echo "Or:  cp backend/.env.example backend/.env  and edit OPENROUTER_* manually."; \
 		exit 1; \
 	fi; \
 	echo "Starting backend on http://localhost:$(BACKEND_PORT)"; \
-	source "$(BACKEND_VENV)/bin/activate"; \
-	set -a; source "$(BACKEND_DIR)/.env"; set +a; \
+	cd "$(BACKEND_DIR)" && \
+	source "$(BACKEND_VENV)/bin/activate" && \
+	set -a && source .env && set +a && \
 	uvicorn app.main:app --reload --host 0.0.0.0 --port "$(BACKEND_PORT)"
 
 .PHONY: dev-frontend
@@ -206,4 +227,43 @@ decrypt-env: check-tools
 clean:
 	@echo "Cleaning local install artifacts (venv + node_modules)"; \
 	rm -rf "$(BACKEND_VENV)" "$(FRONTEND_DIR)/node_modules"
+
+.PHONY: email-help
+email-help:
+	@echo "Ghostwriter — email verification for local login"
+	@echo ""
+	@echo "1) Enable login in backend/.env:"
+	@echo "     GHOSTWRITER_REQUIRE_EMAIL_LOGIN=true"
+	@echo ""
+	@echo "2) Pick how mail is sent (choose one):"
+	@echo ""
+	@echo "   A) Local Mailpit (default SMTP, good for dev)"
+	@echo "      - In another terminal:  make mailpit"
+	@echo "      - Keeps defaults: SMTP_HOST=localhost SMTP_PORT=1025"
+	@echo "      - Open the inbox:     http://localhost:8025"
+	@echo "      - Restart the API after changing backend/.env"
+	@echo ""
+	@echo "   B) Resend (real inbox, HTTP API)"
+	@echo "      - In backend/.env set:"
+	@echo "          EMAIL_BACKEND=resend"
+	@echo "          RESEND_API_KEY=re_xxxxxxxx"
+	@echo "          RESEND_FROM=onboarding@resend.dev   # or your verified domain"
+	@echo "      - Create a key at https://resend.com/api-keys"
+	@echo "      - Restart the API"
+	@echo ""
+	@echo "3) Run the app:  make dev"
+	@echo "   The sign-in dialog explains Mailpit vs Resend based on your config."
+	@echo ""
+
+.PHONY: mailpit
+mailpit: check-tools
+	@command -v docker >/dev/null 2>&1 || { \
+		echo "Docker is required for this shortcut."; \
+		echo "Install Docker Desktop, or run Mailpit manually — see: make email-help"; \
+		exit 1; \
+	}
+	@echo "Starting Mailpit — SMTP localhost:1025  |  Web UI http://localhost:8025"
+	@echo "Press Ctrl+C to stop."
+	@echo ""
+	docker run --rm -p 1025:1025 -p 8025:8025 $(MAILPIT_IMAGE)
 

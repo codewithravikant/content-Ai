@@ -1,13 +1,14 @@
 import pytest
+
 from app.postprocess import (
-    remove_ai_artifacts,
-    parse_content_structure,
     count_words,
-    validate_word_count,
-    standardize_formatting,
     estimate_read_time,
+    parse_content_structure,
+    remove_ai_artifacts,
+    standardize_formatting,
+    validate_word_count,
 )
-from app.schemas import GenerateRequest, ContentType, Tone
+from app.schemas import ContentType, GenerateRequest, Tone
 
 
 def test_remove_ai_artifacts():

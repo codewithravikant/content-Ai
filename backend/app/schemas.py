@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, Literal
 from enum import Enum
+from typing import Any, Dict, Literal, Optional
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class ContentType(str, Enum):
@@ -68,7 +69,7 @@ class JobApplicationContext(BaseModel):
 
 
 class BlogPostSpecifications(BaseModel):
-    word_target: int = Field(..., ge=50, le=5000)
+    word_target: int = Field(..., ge=10, le=500)
     seo_enabled: bool = False
     expertise: ExpertiseLevel = ExpertiseLevel.BEGINNER
 
@@ -105,7 +106,7 @@ class GenerateRequest(BaseModel):
     specifications: Dict[str, Any]
     generation_params: Optional[GenerationParams] = None
 
-    @field_validator('context', 'specifications')
+    @field_validator("context", "specifications")
     @classmethod
     def validate_dict_not_empty(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         if not v:
@@ -130,3 +131,42 @@ class GenerateResponse(BaseModel):
 class ExportPDFRequest(BaseModel):
     content: str
     content_type: ContentType
+
+
+class EmailSendCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=4, max_length=32)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, v: str) -> str:
+        digits = "".join(c for c in v.strip() if c.isdigit())
+        if len(digits) != 6:
+            raise ValueError("Verification code must be 6 digits")
+        return digits
+
+
+class EmailSendCodeResponse(BaseModel):
+    message: str = "If this address can receive mail, a verification code was sent."
+
+
+class EmailVerifyResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class EmailAuthConfigResponse(BaseModel):
+    require_email_login: bool
+    email_backend: Literal["smtp", "resend"] = "smtp"
+    """smtp = send via SMTP (e.g. Mailpit); resend = Resend HTTP API."""
+    dev_inbox_url: Optional[str] = None
+    """When using local SMTP, URL of the mail catcher web UI (e.g. Mailpit)."""
+
+
+class EmailSessionResponse(BaseModel):
+    email: str

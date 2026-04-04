@@ -111,11 +111,11 @@ export function BlogPostForm({ onGenerate, onGenerateStart, onError }: BlogPostF
 
       <div className="relative">
         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 block">
-          Word Count (min-max) * - Min: 50
+          Word Count (min-max) * — 10–500 words per range
         </label>
         <input 
           {...register('word_count')}
-          placeholder="e.g., 50-300"
+          placeholder="e.g., 100-300"
           className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm focus:border-cyan-500/50 focus:bg-white/10 outline-none transition-all placeholder:text-slate-600 text-slate-100"
         />
         {errors.word_count && (

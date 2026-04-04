@@ -86,11 +86,17 @@ export function exportToHTML(content: string): void {
 export async function exportToPDF(content: string, contentType: ContentType): Promise<void> {
   try {
     // Call backend PDF generation endpoint
-    const response = await fetch('/api/export/pdf', {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
+    const key = import.meta.env.VITE_CLIENT_API_KEY?.trim()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (key) {
+      headers.Authorization = `Bearer ${key}`
+    }
+    const response = await fetch(`${apiBase}/export/pdf`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ content, content_type: contentType }),
     })
 

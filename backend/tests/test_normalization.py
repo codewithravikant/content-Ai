@@ -1,12 +1,13 @@
 import pytest
+
 from app.normalization import (
-    normalize_word_count,
-    normalize_tone,
     get_default_generation_params,
     normalize_request,
+    normalize_tone,
+    normalize_word_count,
     validate_request,
 )
-from app.schemas import GenerateRequest, ContentType, Tone, ExpertiseLevel
+from app.schemas import ContentType, ExpertiseLevel, GenerateRequest, Tone
 
 
 def test_normalize_word_count():
@@ -27,8 +28,8 @@ def test_get_default_generation_params():
     """Test default generation parameters."""
     blog_params = get_default_generation_params(ContentType.BLOG_POST)
     assert blog_params.temperature == 0.7
-    assert blog_params.max_tokens == 2000
-    
+    assert blog_params.max_tokens == 1200
+
     email_params = get_default_generation_params(ContentType.EMAIL)
     assert email_params.temperature == 0.6
     assert email_params.max_tokens == 1500
@@ -49,10 +50,11 @@ def test_normalize_request():
             "expertise": ExpertiseLevel.BEGINNER,
         },
     )
-    
+
     normalized = normalize_request(request)
     assert normalized.context["topic"] == "Test Topic"  # Trimmed
-    assert normalized.specifications["word_target"] == 900  # Normalized
+    # "800-1000" → median 900, clamped to blog max 500
+    assert normalized.specifications["word_target"] == 500
 
 
 def test_validate_request():
@@ -65,12 +67,12 @@ def test_validate_request():
             "tone": Tone.ENGAGING,
         },
         specifications={
-            "word_target": 1000,
+            "word_target": 500,
             "seo_enabled": True,
             "expertise": ExpertiseLevel.BEGINNER,
         },
     )
-    
+
     validated = validate_request(request)
     assert validated.content_type == ContentType.BLOG_POST
 
@@ -85,11 +87,11 @@ def test_validate_invalid_request():
             "tone": Tone.ENGAGING,
         },
         specifications={
-            "word_target": 1000,
+            "word_target": 500,
             "seo_enabled": True,
             "expertise": ExpertiseLevel.BEGINNER,
         },
     )
-    
+
     with pytest.raises(ValueError):
         validate_request(request)

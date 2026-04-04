@@ -1,10 +1,12 @@
-import os
-import logging
 import asyncio
+import logging
+import os
 from typing import Any, AsyncGenerator, Dict
 
-from openai import AsyncOpenAI, APIStatusError
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+from openai import APIStatusError, AsyncOpenAI
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+from app.logging_config import log_prompt_sizes_debug
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +14,9 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _normalize_openrouter_model_id(raw: str) -> str:
-    """Fix common .env mistakes. OpenRouter IDs look like `qwen/...` or `openai/gpt-3.5-turbo`, not `openai/qwen/...`."""
+    """
+    Fix common .env mistakes: use `qwen/...` or `openai/gpt-3.5-turbo`, not `openai/qwen/...`.
+    """
     m = (raw or "").strip()
     if m.startswith("openai/qwen/"):
         return m[len("openai/") :]
@@ -48,20 +52,6 @@ def _build_openrouter_client() -> AsyncOpenAI | None:
 
 client = _build_openrouter_client()
 
-# region agent log
-try:
-    from app.debug_ndjson import dbg as _agent_dbg
-
-    _agent_dbg(
-        "H4",
-        "ai_client.module_init",
-        "openrouter_client_state",
-        {"has_client": client is not None, "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")},
-    )
-except Exception:
-    pass
-# endregion
-
 
 def _should_retry_generation(exc: BaseException) -> bool:
     """Retry on 5xx, timeouts, rate limits; do not retry most 4xx (e.g. 402 billing)."""
@@ -90,7 +80,9 @@ class AIClient:
 
     def _require_client(self) -> AsyncOpenAI:
         if not client:
-            raise Exception("OpenRouter client not initialized. Check OPENROUTER_API_KEY environment variable.")
+            raise Exception(
+                "OpenRouter client not initialized. Check OPENROUTER_API_KEY environment variable."
+            )
         return client
 
     @staticmethod
@@ -101,13 +93,20 @@ class AIClient:
         top_p = gen_params.top_p if hasattr(gen_params, "top_p") else 0.9
         return temperature, max_tokens, top_p
 
-    async def _generate_openrouter(self, request: Any, prompt_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_openrouter(
+        self, request: Any, prompt_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         api = self._require_client()
         temperature, max_tokens, top_p = self._extract_params(request)
         messages = [
             {"role": "system", "content": prompt_data["system_prompt"]},
             {"role": "user", "content": prompt_data["user_prompt"]},
         ]
+
+        log_prompt_sizes_debug(
+            len(prompt_data["system_prompt"]),
+            len(prompt_data["user_prompt"]),
+        )
 
         logger.info(
             "Calling OpenRouter model: %s, temperature: %s, max_tokens: %s",
@@ -127,10 +126,8 @@ class AIClient:
         )
 
         full_content = ""
-        final_chunk = None
         tokens_used: int | None = None
         async for chunk in stream:
-            final_chunk = chunk
             u = getattr(chunk, "usage", None)
             if u is not None:
                 t = _usage_total_tokens(u)
@@ -145,7 +142,9 @@ class AIClient:
             if delta:
                 full_content += delta
 
-        logger.info("Generation completed. Content length: %s, Tokens: %s", len(full_content), tokens_used)
+        logger.info(
+            "Generation completed. Content length: %s, Tokens: %s", len(full_content), tokens_used
+        )
         return {
             "content": full_content.strip(),
             "metadata": {
@@ -179,6 +178,11 @@ class AIClient:
             {"role": "system", "content": prompt_data["system_prompt"]},
             {"role": "user", "content": prompt_data["user_prompt"]},
         ]
+
+        log_prompt_sizes_debug(
+            len(prompt_data["system_prompt"]),
+            len(prompt_data["user_prompt"]),
+        )
 
         logger.info("Starting OpenRouter streaming generation: %s", self.model)
         stream = await api.chat.completions.create(

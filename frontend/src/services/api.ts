@@ -7,6 +7,19 @@ import { GenerateRequest, GenerateResponse } from '../types'
 // Set VITE_API_BASE_URL=http://localhost:8000 only if you need direct calls without a proxy.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
+const clientApiKey = import.meta.env.VITE_CLIENT_API_KEY?.trim()
+
+/** Opaque session from POST /auth/email/verify; takes precedence over VITE_CLIENT_API_KEY when set. */
+export const EMAIL_SESSION_KEY = 'ghostwriter_email_session'
+
+function bearerForRequests(): string | undefined {
+  if (typeof localStorage === 'undefined') {
+    return clientApiKey
+  }
+  const session = localStorage.getItem(EMAIL_SESSION_KEY)?.trim()
+  return session || clientApiKey
+}
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -15,38 +28,141 @@ const apiClient = axios.create({
   timeout: 120000, // 120 seconds for AI generation
 })
 
-/** Quick check that the backend is reachable (via /api/health when using the Vite proxy). */
+apiClient.interceptors.request.use((config) => {
+  const token = bearerForRequests()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  } else {
+    delete config.headers.Authorization
+  }
+  return config
+})
+
+/**
+ * Quick check that the backend is reachable.
+ * Uses `fetch` (not axios) so the probe does not send JSON / optional API-key headers.
+ * Without `VITE_API_BASE_URL`, calls same-origin `/api/health` so the Vite dev proxy forwards to :8000.
+ */
+/** Public hints from GET /auth/email/config (no secrets). */
+export type AuthEmailConfig = {
+  require_email_login: boolean
+  email_backend: 'smtp' | 'resend'
+  dev_inbox_url: string | null
+}
+
+const defaultAuthEmailConfig: AuthEmailConfig = {
+  require_email_login: false,
+  email_backend: 'smtp',
+  dev_inbox_url: null,
+}
+
+export async function fetchAuthEmailConfig(): Promise<AuthEmailConfig> {
+  try {
+    const direct = import.meta.env.VITE_API_BASE_URL?.trim()
+    const url = direct
+      ? `${direct.replace(/\/$/, '')}/auth/email/config`
+      : '/api/auth/email/config'
+    const r = await fetch(url, { cache: 'no-store' })
+    if (!r.ok) {
+      return defaultAuthEmailConfig
+    }
+    const data = (await r.json()) as Partial<AuthEmailConfig>
+    return {
+      require_email_login: Boolean(data.require_email_login),
+      email_backend: data.email_backend === 'resend' ? 'resend' : 'smtp',
+      dev_inbox_url: typeof data.dev_inbox_url === 'string' ? data.dev_inbox_url : null,
+    }
+  } catch {
+    return defaultAuthEmailConfig
+  }
+}
+
+export function clearEmailSession(): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.removeItem(EMAIL_SESSION_KEY)
+}
+
+export async function sendEmailVerificationCode(email: string): Promise<void> {
+  try {
+    await apiClient.post('/auth/email/send-code', { email })
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<{ detail?: string }>
+      const message =
+        axiosError.response?.data?.detail ||
+        axiosError.message ||
+        'Could not send verification code'
+      throw new Error(message)
+    }
+    throw error
+  }
+}
+
+export async function verifyEmailCode(
+  email: string,
+  code: string
+): Promise<{ access_token: string; expires_in: number }> {
+  try {
+    const response = await apiClient.post<{ access_token: string; expires_in: number }>(
+      '/auth/email/verify',
+      { email, code }
+    )
+    return response.data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<{ detail?: string }>
+      const message =
+        axiosError.response?.data?.detail ||
+        axiosError.message ||
+        'Verification failed'
+      throw new Error(message)
+    }
+    throw error
+  }
+}
+
+export async function logoutEmailSession(): Promise<void> {
+  try {
+    await apiClient.post('/auth/email/logout')
+  } finally {
+    clearEmailSession()
+  }
+}
+
 export async function fetchBackendHealth(): Promise<boolean> {
   try {
-    const r = await apiClient.get<{ status?: string }>('/health', { timeout: 5000 })
-    return r.status === 200 && r.data?.status === 'healthy'
+    const direct = import.meta.env.VITE_API_BASE_URL?.trim()
+    const url = direct ? `${direct.replace(/\/$/, '')}/health` : '/api/health'
+
+    const ctrl = new AbortController()
+    const tid = setTimeout(() => ctrl.abort(), 5000)
+    let r: Response
+    try {
+      r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: ctrl.signal,
+      })
+    } finally {
+      clearTimeout(tid)
+    }
+    if (!r.ok) return false
+    const data = (await r.json()) as { status?: string }
+    return data?.status === 'healthy'
   } catch {
     return false
   }
 }
 
 export async function generateContent(request: GenerateRequest): Promise<GenerateResponse> {
-  // region agent log
-  fetch('http://127.0.0.1:7822/ingest/bf728b1b-4f52-40bb-a991-67ac1e5a030d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'78b2f3'},body:JSON.stringify({sessionId:'78b2f3',location:'api.ts:generateContent',message:'pre_post',data:{apiBaseUrl:API_BASE_URL,postPath:'/generate',contentType:request.content_type},timestamp:Date.now(),hypothesisId:'H1',runId:'pre-fix'})}).catch(()=>{});
-  // endregion
   try {
     const response = await apiClient.post<GenerateResponse>('/generate', request)
-    // region agent log
-    fetch('http://127.0.0.1:7822/ingest/bf728b1b-4f52-40bb-a991-67ac1e5a030d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'78b2f3'},body:JSON.stringify({sessionId:'78b2f3',location:'api.ts:generateContent',message:'post_ok',data:{status:response.status},timestamp:Date.now(),hypothesisId:'H2',runId:'pre-fix'})}).catch(()=>{});
-    // endregion
     return response.data
   } catch (error) {
-    // region agent log
-    if (axios.isAxiosError(error)) {
-      const ax = error as AxiosError<{ detail?: string }>
-      fetch('http://127.0.0.1:7822/ingest/bf728b1b-4f52-40bb-a991-67ac1e5a030d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'78b2f3'},body:JSON.stringify({sessionId:'78b2f3',location:'api.ts:generateContent',message:'post_error',data:{code:ax.code,httpStatus:ax.response?.status,detail:ax.response?.data?.detail,msg:String(ax.message)},timestamp:Date.now(),hypothesisId:'H5',runId:'pre-fix'})}).catch(()=>{});
-    }
-    // endregion
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<{ detail?: string }>
       let message =
         axiosError.response?.data?.detail || axiosError.message || 'Failed to generate content'
-      // Runtime evidence: ERR_NETWORK means no HTTP response (backend down, proxy cannot reach :8000, or dev server stopped).
       if (
         !axiosError.response &&
         (axiosError.code === 'ERR_NETWORK' || axiosError.message === 'Network Error')
@@ -68,10 +184,15 @@ export function generateContentStream(
   onComplete: (fullContent: string) => void,
   onError: (error: string) => void
 ) {
+  const streamParams = new URLSearchParams({
+    data: JSON.stringify(request),
+  })
+  const streamToken = bearerForRequests()
+  if (streamToken) {
+    streamParams.set('api_key', streamToken)
+  }
   const eventSource = new EventSource(
-    `${API_BASE_URL}/generate/stream?${new URLSearchParams({
-      data: JSON.stringify(request),
-    })}`
+    `${API_BASE_URL}/generate/stream?${streamParams}`
   )
 
   let fullContent = ''

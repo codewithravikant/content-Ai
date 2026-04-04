@@ -3,15 +3,19 @@ import { z } from 'zod'
 export const blogPostSchema = z.object({
   topic: z.string().min(3, 'Topic must be at least 3 characters').max(200, 'Topic must be less than 200 characters'),
   target_audience: z.string().min(3, 'Target audience must be at least 3 characters').max(100),
-  word_count: z.string().regex(/^\d+-\d+$/, 'Word count must be in format "min-max" (e.g., "50-300")').refine(
-    (val) => {
-      const match = val.match(/^(\d+)-(\d+)$/)
-      if (!match) return false
-      const min = parseInt(match[1], 10)
-      return min >= 50
-    },
-    { message: 'Minimum word count must be at least 50' }
-  ),
+  word_count: z
+    .string()
+    .regex(/^\d+-\d+$/, 'Word count must be in format "min-max" (e.g., "100-300")')
+    .refine(
+      (val) => {
+        const match = val.match(/^(\d+)-(\d+)$/)
+        if (!match) return false
+        const min = parseInt(match[1], 10)
+        const max = parseInt(match[2], 10)
+        return min >= 10 && max <= 500 && min <= max
+      },
+      { message: 'Use a range between 10 and 500 words (min ≤ max), e.g. "100-300"' }
+    ),
   tone: z.enum(['professional', 'casual', 'friendly', 'formal', 'engaging', 'persuasive'], {
     errorMap: () => ({ message: 'Please select a valid tone' }),
   }),
@@ -34,14 +38,15 @@ export type BlogPostFormData = z.infer<typeof blogPostSchema>
 export type EmailFormData = z.infer<typeof emailSchema>
 
 // Normalization utilities
+/** Blog: median of range, clamped to [10, 500] (matches backend `blog_word_target_from_range`). */
 export function normalizeWordCount(wordCount: string): number {
   const match = wordCount.match(/^(\d+)-(\d+)$/)
-  if (!match) return 50 // default minimum
+  if (!match) return 255
   const min = parseInt(match[1], 10)
   const max = parseInt(match[2], 10)
-  if (min < 50 || max < 50 || min > max) return 50
-  const result = Math.floor((min + max) / 2)
-  return Math.max(50, result) // Ensure minimum 50
+  if (min < 10 || max > 500 || min > max) return 255
+  const mid = Math.floor((min + max) / 2)
+  return Math.max(10, Math.min(500, mid))
 }
 
 // New content type schemas

@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 100
+# Match CI: keep checks practical on legacy prompt strings and imports.
+extend-ignore = E203, W503, W293, W291, E501, F401, E712
+exclude = .venv,.venv-*,__pycache__,*.egg-info
+# load_dotenv must run before app imports that read OPENROUTER_API_KEY at import time
+per-file-ignores =
+    app/main.py: E402

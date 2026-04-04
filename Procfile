@@ -1,4 +1,4 @@
-# Procfile for Railway/Heroku deployment
-# Railway will use nixpacks.toml or Dockerfile, but this can be used as fallback
-
+# Procfile for Railway/Heroku (fallback if the platform uses Procfile).
+# Prefer Dockerfile CMD or `railway.toml` / dashboard start command.
+# From repo root:
 web: bash railway-entry.sh

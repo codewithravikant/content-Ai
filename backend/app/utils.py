@@ -1,5 +1,6 @@
-from fastapi import Request
 from typing import Optional
+
+from fastapi import Request
 
 
 def get_client_ip(request: Request) -> str:
@@ -13,14 +14,14 @@ def get_client_ip(request: Request) -> str:
         # Take the first IP in the chain
         ip = forwarded_for.split(",")[0].strip()
         return ip
-    
+
     # Check X-Real-IP header
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip.strip()
-    
+
     # Fallback to direct client IP
     if request.client:
         return request.client.host
-    
+
     return "unknown"

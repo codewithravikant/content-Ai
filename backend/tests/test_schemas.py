@@ -1,14 +1,15 @@
 import pytest
+
 from app.schemas import (
-    GenerateRequest,
-    ContentType,
     BlogPostContext,
-    EmailContext,
     BlogPostSpecifications,
+    ContentType,
+    EmailContext,
     EmailSpecifications,
+    ExpertiseLevel,
+    GenerateRequest,
     GenerationParams,
     Tone,
-    ExpertiseLevel,
     UrgencyLevel,
 )
 
@@ -72,7 +73,7 @@ def test_invalid_temperature():
 def test_invalid_word_target():
     """Test invalid word target range."""
     with pytest.raises(Exception):
-        BlogPostSpecifications(word_target=10)  # Below minimum of 50
+        BlogPostSpecifications(word_target=5)  # Below schema minimum (10)
 
 
 def test_empty_context():
