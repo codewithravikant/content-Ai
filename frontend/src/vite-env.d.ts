@@ -4,4 +4,6 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
   /** Optional shared secret when backend sets GHOSTWRITER_CLIENT_API_KEY (visible in browser; use a gateway for real protection). */
   readonly VITE_CLIENT_API_KEY?: string
+  /** If true, treat email login as required when /auth/email/config cannot be loaded (dev override). */
+  readonly VITE_REQUIRE_EMAIL_LOGIN?: string
 }

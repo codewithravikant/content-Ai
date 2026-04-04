@@ -56,6 +56,22 @@ const defaultAuthEmailConfig: AuthEmailConfig = {
   dev_inbox_url: null,
 }
 
+/** When config cannot be loaded, assume login is required in production builds (fail closed). */
+function authConfigFallback(): AuthEmailConfig {
+  const force =
+    import.meta.env.PROD === true || import.meta.env.VITE_REQUIRE_EMAIL_LOGIN === 'true'
+  if (force && import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL?.trim()) {
+    console.warn(
+      '[Ghostwriter] Auth config could not be loaded. Set VITE_API_BASE_URL to your backend URL ' +
+        '(Railway frontend Variables, then rebuild) so /auth/email and /generate reach the API.',
+    )
+  }
+  return {
+    ...defaultAuthEmailConfig,
+    require_email_login: force,
+  }
+}
+
 export async function fetchAuthEmailConfig(): Promise<AuthEmailConfig> {
   try {
     const direct = import.meta.env.VITE_API_BASE_URL?.trim()
@@ -64,7 +80,11 @@ export async function fetchAuthEmailConfig(): Promise<AuthEmailConfig> {
       : '/api/auth/email/config'
     const r = await fetch(url, { cache: 'no-store' })
     if (!r.ok) {
-      return defaultAuthEmailConfig
+      return authConfigFallback()
+    }
+    const ct = r.headers.get('content-type') || ''
+    if (!ct.includes('application/json')) {
+      return authConfigFallback()
     }
     const data = (await r.json()) as Partial<AuthEmailConfig>
     return {
@@ -73,7 +93,7 @@ export async function fetchAuthEmailConfig(): Promise<AuthEmailConfig> {
       dev_inbox_url: typeof data.dev_inbox_url === 'string' ? data.dev_inbox_url : null,
     }
   } catch {
-    return defaultAuthEmailConfig
+    return authConfigFallback()
   }
 }
 
