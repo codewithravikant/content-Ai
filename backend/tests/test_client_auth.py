@@ -63,6 +63,15 @@ def test_validate_production_resend_ok_with_api_key(monkeypatch):
     validate_production_config()
 
 
+def test_validate_production_rejects_resend_key_when_backend_not_resend(monkeypatch):
+    monkeypatch.setenv("GHOSTWRITER_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.delenv("EMAIL_BACKEND", raising=False)
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    with pytest.raises(RuntimeError, match="EMAIL_BACKEND"):
+        validate_production_config()
+
+
 def test_health_unauthenticated_with_client_key(client, monkeypatch):
     monkeypatch.setenv("GHOSTWRITER_CLIENT_API_KEY", "secret-key-for-tests")
     r = client.get("/health")

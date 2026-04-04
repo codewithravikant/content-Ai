@@ -11,6 +11,8 @@ import secrets
 from fastapi import HTTPException
 
 from app import email_service
+from app.email_service import EmailSendError
+from app.env_validation import is_production
 from app.cache import get_cache
 from app.rate_limiter import (
     get_email_send_email_limiter,
@@ -83,18 +85,40 @@ async def request_verification_code(email: str, client_ip: str) -> None:
 
     try:
         await email_service.send_verification_email(ne, code)
+    except EmailSendError as exc:
+        logger.warning("Verification email failed for %s: %s", ne, exc)
+        await cache.delete(f"email_vercode:{ne}")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception:
         logger.exception("Failed to send verification email to %s", ne)
         await cache.delete(f"email_vercode:{ne}")
         raise HTTPException(
             status_code=503,
-            detail=(
-                "We could not send the verification email. "
-                "For local SMTP: run `make mailpit` in a second terminal (Mailpit on localhost:1025), "
-                "then retry. Or set EMAIL_BACKEND=resend with RESEND_API_KEY in backend/.env. "
-                "See `make email-help`."
-            ),
+            detail=_verification_email_unavailable_detail(),
         )
+
+
+def _verification_email_unavailable_detail() -> str:
+    backend = os.getenv("EMAIL_BACKEND", "smtp").strip().lower()
+    if backend == "resend":
+        return (
+            "We could not send the verification email via Resend. "
+            "Confirm the API service has valid RESEND_API_KEY and RESEND_FROM (Railway Variables). "
+            "The From address must be allowed in your Resend project (e.g. onboarding@resend.dev for testing, "
+            "or a domain you verified). Check the API deployment logs for the exact Resend error."
+        )
+    if is_production():
+        return (
+            "We could not send the verification email. "
+            "The API is using SMTP (EMAIL_BACKEND is not resend). On Railway set EMAIL_BACKEND=resend "
+            "and RESEND_API_KEY (and RESEND_FROM), then redeploy the API."
+        )
+    return (
+        "We could not send the verification email. "
+        "For local SMTP: run `make mailpit` in a second terminal (Mailpit on localhost:1025), "
+        "then retry. Or set EMAIL_BACKEND=resend with RESEND_API_KEY in backend/.env. "
+        "See `make email-help`."
+    )
 
 
 async def verify_code_and_issue_session(email: str, code: str, client_ip: str) -> str:

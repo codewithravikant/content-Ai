@@ -49,3 +49,10 @@ def validate_production_config() -> None:
             "GHOSTWRITER_ENV=production with email login and EMAIL_BACKEND=resend requires "
             "RESEND_API_KEY to be set (e.g. Railway Variables). Get a key at https://resend.com/api-keys"
         )
+
+    # Default EMAIL_BACKEND is smtp (localhost:1025). If RESEND_API_KEY is set but EMAIL_BACKEND is not resend, sends fail on Railway.
+    if os.getenv("RESEND_API_KEY", "").strip() and backend != "resend":
+        raise RuntimeError(
+            "RESEND_API_KEY is set but EMAIL_BACKEND is not resend (default is smtp). "
+            "Set EMAIL_BACKEND=resend on the API service. Otherwise the app tries local SMTP and cannot send mail."
+        )

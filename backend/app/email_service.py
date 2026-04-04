@@ -17,6 +17,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+class EmailSendError(Exception):
+    """Email could not be sent; message is intended for API clients (no secrets)."""
+
+
 async def send_verification_email(to_email: str, code: str) -> None:
     subject = "Your Ghostwriter verification code"
     body_text = (
@@ -54,7 +58,9 @@ def _send_smtp_sync(to_email: str, subject: str, body_text: str) -> None:
 async def _send_resend(to_email: str, subject: str, body_text: str) -> None:
     key = os.getenv("RESEND_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("RESEND_API_KEY is required when EMAIL_BACKEND=resend")
+        raise EmailSendError(
+            "Resend is selected but RESEND_API_KEY is not set. Add it to the server environment (e.g. Railway Variables)."
+        )
     from_addr = os.getenv("RESEND_FROM", "onboarding@resend.dev").strip()
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
@@ -67,6 +73,36 @@ async def _send_resend(to_email: str, subject: str, body_text: str) -> None:
                 "text": body_text,
             },
         )
-        if r.status_code >= 400:
+        # 401 = bad API key. 403 is also used for validation (e.g. testing mode: only your account email).
+        if r.status_code == 401:
+            logger.error("Resend API auth error: %s %s", r.status_code, r.text[:500])
+            raise EmailSendError(
+                "Resend rejected the API key. Create a new key at resend.com/api-keys and update RESEND_API_KEY."
+            )
+        if 400 <= r.status_code < 500:
             logger.error("Resend API error: %s %s", r.status_code, r.text[:500])
-        r.raise_for_status()
+            detail = "Resend could not send this message."
+            try:
+                data = r.json()
+                if isinstance(data, dict) and isinstance(data.get("message"), str):
+                    detail = f"Resend: {data['message']}"
+            except Exception:
+                pass
+            raise EmailSendError(detail)
+        if r.status_code >= 500:
+            logger.error("Resend API error: %s %s", r.status_code, r.text[:500])
+            detail = "Resend had a temporary error. Try again in a minute."
+            try:
+                data = r.json()
+                if isinstance(data, dict) and isinstance(data.get("message"), str):
+                    detail = f"Resend: {data['message']}"
+            except Exception:
+                pass
+            raise EmailSendError(detail)
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.error("Resend unexpected status: %s", exc)
+            raise EmailSendError(
+                "Resend returned an unexpected response. Check API logs and resend.com status."
+            ) from exc
