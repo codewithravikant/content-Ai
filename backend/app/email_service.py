@@ -1,7 +1,9 @@
 """
-Send verification email via SMTP (Mailpit/MailHog in dev) or Resend HTTP API.
+Send verification email via SMTP (Mailpit/MailHog in dev, or e.g. Gmail) or Resend HTTP API.
 
 Set EMAIL_BACKEND=smtp (default) or EMAIL_BACKEND=resend.
+
+Gmail: use smtp.gmail.com, port 465 (SSL) or 587 (STARTTLS), and an App Password (not your normal password).
 """
 
 from __future__ import annotations
@@ -9,8 +11,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 
 import httpx
 
@@ -31,25 +35,81 @@ async def send_verification_email(to_email: str, code: str) -> None:
     if backend == "resend":
         await _send_resend(to_email, subject, body_text)
     else:
-        await asyncio.to_thread(_send_smtp_sync, to_email, subject, body_text)
+        try:
+            await asyncio.to_thread(_send_smtp_sync, to_email, subject, body_text)
+        except EmailSendError:
+            raise
+        except smtplib.SMTPException as exc:
+            logger.exception("SMTP send failed")
+            raise EmailSendError(
+                "Could not send email via SMTP. Check SMTP_HOST, port, SMTP_USER, and password "
+                "(Gmail requires an app password and often port 465 with SSL or 587 with STARTTLS)."
+            ) from exc
+        except OSError as exc:
+            logger.exception("SMTP connection failed")
+            raise EmailSendError(
+                f"Could not connect to the SMTP server ({os.getenv('SMTP_HOST', 'localhost')}). "
+                "Check SMTP_HOST and SMTP_PORT."
+            ) from exc
+
+
+def _smtp_from_header() -> str:
+    """SMTP_FROM or EMAIL_FROM; supports `Name <email@domain.com>`, plain email, or `Name email@domain`."""
+    raw = (os.getenv("SMTP_FROM") or os.getenv("EMAIL_FROM") or "ghostwriter@localhost").strip()
+    if not raw:
+        return "ghostwriter@localhost"
+    name, addr = parseaddr(raw)
+    if addr:
+        if name:
+            return formataddr((name, addr))
+        return addr
+    m = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", raw)
+    if m:
+        email_addr = m.group(1)
+        display = raw[: raw.find(email_addr)].strip()
+        if display:
+            return formataddr((display, email_addr))
+        return email_addr
+    return raw
+
+
+def _smtp_password() -> str:
+    raw = (os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS") or "").strip()
+    if not raw:
+        return ""
+    # Gmail app passwords are often pasted with spaces between groups
+    return re.sub(r"\s+", "", raw)
 
 
 def _send_smtp_sync(to_email: str, subject: str, body_text: str) -> None:
     host = os.getenv("SMTP_HOST", "localhost").strip()
     port = int(os.getenv("SMTP_PORT", "1025"))
-    from_addr = os.getenv("SMTP_FROM", "ghostwriter@localhost").strip()
+    from_header = _smtp_from_header()
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = from_addr
+    msg["From"] = from_header
     msg["To"] = to_email
     msg.set_content(body_text)
 
+    tls_env = os.getenv("SMTP_USE_TLS", "").strip().lower() in ("1", "true", "yes", "on")
+    ssl_env = os.getenv("SMTP_USE_SSL", "").strip().lower() in ("1", "true", "yes", "on")
+    use_ssl = ssl_env or port == 465
+    use_starttls = (tls_env or port == 587) and not use_ssl
+
+    user = os.getenv("SMTP_USER", "").strip()
+    pw = _smtp_password()
+
+    if use_ssl:
+        with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
+            if user:
+                smtp.login(user, pw)
+            smtp.send_message(msg)
+        return
+
     with smtplib.SMTP(host, port, timeout=30) as smtp:
-        if os.getenv("SMTP_USE_TLS", "").strip().lower() in ("1", "true", "yes", "on"):
+        if use_starttls:
             smtp.starttls()
-        user = os.getenv("SMTP_USER", "").strip()
-        pw = os.getenv("SMTP_PASSWORD", "").strip()
         if user:
             smtp.login(user, pw)
         smtp.send_message(msg)

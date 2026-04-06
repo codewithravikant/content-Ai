@@ -49,10 +49,37 @@ def validate_production_config() -> None:
             "GHOSTWRITER_ENV=production with email login and EMAIL_BACKEND=resend requires "
             "RESEND_API_KEY to be set (e.g. Railway Variables). Get a key at https://resend.com/api-keys"
         )
+    if require_email_login() and backend == "smtp":
+        host = os.getenv("SMTP_HOST", "").strip()
+        port = os.getenv("SMTP_PORT", "").strip()
+        from_addr = (os.getenv("SMTP_FROM") or os.getenv("EMAIL_FROM") or "").strip()
+        user = os.getenv("SMTP_USER", "").strip()
+        password = (os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS") or "").strip()
+        if not host:
+            raise RuntimeError(
+                "GHOSTWRITER_ENV=production with email login and EMAIL_BACKEND=smtp requires SMTP_HOST."
+            )
+        if not port:
+            raise RuntimeError(
+                "GHOSTWRITER_ENV=production with email login and EMAIL_BACKEND=smtp requires SMTP_PORT."
+            )
+        if not from_addr:
+            raise RuntimeError(
+                "GHOSTWRITER_ENV=production with email login and EMAIL_BACKEND=smtp requires SMTP_FROM "
+                "(or EMAIL_FROM)."
+            )
+        # If auth is partially configured, fail fast so startup does not hide bad credentials.
+        if (user and not password) or (password and not user):
+            raise RuntimeError(
+                "SMTP auth is partially configured. Set both SMTP_USER and SMTP_PASSWORD "
+                "(or SMTP_PASS), or leave both empty for unauthenticated SMTP."
+            )
 
-    # Default EMAIL_BACKEND is smtp (localhost:1025). If RESEND_API_KEY is set but EMAIL_BACKEND is not resend, sends fail on Railway.
+    # Default EMAIL_BACKEND is smtp (localhost:1025). If RESEND_API_KEY is set but EMAIL_BACKEND is not resend,
+    # deployments can silently keep trying SMTP instead of the Resend API.
     if os.getenv("RESEND_API_KEY", "").strip() and backend != "resend":
         raise RuntimeError(
             "RESEND_API_KEY is set but EMAIL_BACKEND is not resend (default is smtp). "
             "Set EMAIL_BACKEND=resend on the API service. Otherwise the app tries local SMTP and cannot send mail."
         )
+

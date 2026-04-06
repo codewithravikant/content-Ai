@@ -50,6 +50,7 @@ from app.quota import check_quota
 from app.rate_limiter import get_rate_limiter
 from app.schemas import (
     EmailAuthConfigResponse,
+    EmailAuthHealthResponse,
     EmailSendCodeRequest,
     EmailSendCodeResponse,
     EmailSessionResponse,
@@ -221,9 +222,68 @@ def _email_auth_public_config() -> EmailAuthConfigResponse:
     )
 
 
+def _email_auth_health() -> EmailAuthHealthResponse:
+    backend = os.getenv("EMAIL_BACKEND", "smtp").strip().lower()
+    eb: Literal["smtp", "resend"] = "resend" if backend == "resend" else "smtp"
+    checks: list[str] = []
+    warnings: list[str] = []
+    configured = True
+
+    if eb == "resend":
+        if os.getenv("RESEND_API_KEY", "").strip():
+            checks.append("RESEND_API_KEY is set")
+        else:
+            configured = False
+            warnings.append("RESEND_API_KEY is missing")
+        resend_from = os.getenv("RESEND_FROM", "").strip()
+        if resend_from:
+            checks.append("RESEND_FROM is set")
+        else:
+            warnings.append("RESEND_FROM is not set (defaults to onboarding@resend.dev)")
+    else:
+        host = os.getenv("SMTP_HOST", "").strip()
+        port = os.getenv("SMTP_PORT", "").strip()
+        sender = (os.getenv("SMTP_FROM") or os.getenv("EMAIL_FROM") or "").strip()
+        user = os.getenv("SMTP_USER", "").strip()
+        password = (os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS") or "").strip()
+        if host:
+            checks.append("SMTP_HOST is set")
+        else:
+            configured = False
+            warnings.append("SMTP_HOST is missing")
+        if port:
+            checks.append("SMTP_PORT is set")
+        else:
+            configured = False
+            warnings.append("SMTP_PORT is missing")
+        if sender:
+            checks.append("SMTP_FROM/EMAIL_FROM is set")
+        else:
+            configured = False
+            warnings.append("SMTP_FROM or EMAIL_FROM is missing")
+        if user and password:
+            checks.append("SMTP auth variables are set")
+        elif user or password:
+            configured = False
+            warnings.append("SMTP auth is partially configured; set both SMTP_USER and SMTP_PASSWORD")
+        else:
+            warnings.append("SMTP auth not configured (valid only for unauthenticated SMTP servers)")
+    return EmailAuthHealthResponse(
+        email_backend=eb,
+        configured=configured,
+        checks=checks,
+        warnings=warnings,
+    )
+
+
 @app.get("/auth/email/config", response_model=EmailAuthConfigResponse)
 async def auth_email_config():
     return _email_auth_public_config()
+
+
+@app.get("/auth/email/health", response_model=EmailAuthHealthResponse)
+async def auth_email_health():
+    return _email_auth_health()
 
 
 @app.post("/auth/email/send-code", response_model=EmailSendCodeResponse)

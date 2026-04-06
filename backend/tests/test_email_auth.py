@@ -55,6 +55,32 @@ def test_auth_email_config_remote_smtp_hides_mailpit_url(client, monkeypatch):
     assert r.json()["dev_inbox_url"] is None
 
 
+def test_auth_email_health_resend_missing_key(client, monkeypatch):
+    monkeypatch.setenv("EMAIL_BACKEND", "resend")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    r = client.get("/auth/email/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["email_backend"] == "resend"
+    assert data["configured"] is False
+    assert any("RESEND_API_KEY" in msg for msg in data["warnings"])
+
+
+def test_auth_email_health_smtp_configured(client, monkeypatch):
+    monkeypatch.setenv("EMAIL_BACKEND", "smtp")
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_PORT", "465")
+    monkeypatch.setenv("SMTP_FROM", "Content AI <x@example.com>")
+    monkeypatch.setenv("SMTP_USER", "x@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "abcdefghijklmnop")
+    r = client.get("/auth/email/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["email_backend"] == "smtp"
+    assert data["configured"] is True
+    assert any("SMTP_HOST" in msg for msg in data["checks"])
+
+
 def test_send_and_verify_flow(client, monkeypatch):
     sent = {}
 

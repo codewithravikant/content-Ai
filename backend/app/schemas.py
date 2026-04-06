@@ -168,5 +168,12 @@ class EmailAuthConfigResponse(BaseModel):
     """When using local SMTP, URL of the mail catcher web UI (e.g. Mailpit)."""
 
 
+class EmailAuthHealthResponse(BaseModel):
+    email_backend: Literal["smtp", "resend"] = "smtp"
+    configured: bool
+    checks: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class EmailSessionResponse(BaseModel):
     email: str

@@ -77,24 +77,27 @@ https://web-aiforme.up.railway.app/
    - API Docs: http://localhost:8000/docs
 
 ## Deploy on Railway
-##optional
 
-Ghostwriter is ready to deploy on Railway! See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
+Ghostwriter is ready for a **single-service Railway deployment** (recommended).  
+See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for full details.
 
-**Quick Railway Deployment:**
+**Quick Railway Deployment (single service):**
 
 1. Push your code to your Git remote (e.g. [Gitea](https://gitea.kood.tech/ravikantpandit/ghostwriter))
-2. Create a new Railway project
-3. Deploy backend service (pick one):
-   - **Monorepo root:** use the repo root as the service root; `railway.toml` builds with the root **`Dockerfile`** (Python image includes `pip` — avoids Nix “No module named pip”).
-   - **Backend only:** set service root to **`backend`** and use **`backend/Dockerfile`**.
-   - Set `OPENROUTER_API_KEY` (and optional `OPENROUTER_MODEL`, `CORS_ORIGINS`).
-4. Deploy frontend service:
-   - Root directory: `frontend`
-   - Set `VITE_API_BASE_URL` to your backend Railway URL
-5. Update backend `CORS_ORIGINS` with frontend URL
+2. Create a new Railway project and add **one service** from this repo
+3. Keep service root at repo root (`.`) so Railway uses `railway.toml` + root `Dockerfile`
+4. Generate a public domain for the service
+5. Set service Variables:
+   - `GHOSTWRITER_ENV=production`
+   - `CORS_ORIGINS=https://<your-service-domain>`
+   - `OPENROUTER_API_KEY=<your-key>`
+   - `OPENROUTER_MODEL=<your-model>` (optional)
+   - Email variables (`EMAIL_BACKEND`, `RESEND_*` or `SMTP_*`) as needed
+6. Deploy and verify:
+   - `https://<your-service-domain>/health`
+   - Open app root URL and generate content
 
-For details, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
+For details and troubleshooting, see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
 ## Manual Setup
 
@@ -258,6 +261,56 @@ CORS_ORIGINS=http://localhost:3000
    - `meta-llama/llama-3-8b-instruct`
    - `qwen/qwen3.6-plus:free` (example free tier; IDs are always `provider/model`, not `openai/qwen/...`)
 4. Optionally set `APP_URL` so OpenRouter usage analytics can attribute requests to your app
+
+### Email Verification (OTP) Setup
+
+When `GHOSTWRITER_REQUIRE_EMAIL_LOGIN=true`, the backend sends one-time verification codes by the configured email backend.
+
+Quick helper:
+
+```bash
+make email-help
+```
+
+Choose one delivery option in `backend/.env`:
+
+**A) Local Mailpit (dev default)**
+
+```env
+EMAIL_BACKEND=smtp
+SMTP_HOST=localhost
+SMTP_PORT=1025
+SMTP_FROM=ghostwriter@localhost
+```
+
+- Run Mailpit in another terminal: `make mailpit`
+- Open inbox UI: `http://localhost:8025`
+
+**B) Resend (real inbox, HTTP API)**
+
+```env
+EMAIL_BACKEND=resend
+RESEND_API_KEY=re_xxxxxxxx
+RESEND_FROM=onboarding@resend.dev
+```
+
+- Create key at [https://resend.com/api-keys](https://resend.com/api-keys)
+- For production, prefer a verified domain sender
+
+**C) Gmail SMTP (real inbox, App Password)**
+
+```env
+EMAIL_BACKEND=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USE_SSL=1
+SMTP_USER=codewithravikant@gmail.com
+SMTP_PASSWORD=<16-char Google App Password>
+SMTP_FROM=Content AI <codewithravikant@gmail.com>
+```
+
+- Gmail requires 2FA and an App Password (do not use your normal account password)
+- Restart backend after changing env values
 
 ### Secret Management
 
